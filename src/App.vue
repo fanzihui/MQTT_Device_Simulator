@@ -162,7 +162,6 @@ function openPlanDialog(initialMode: 'list' | 'create') {
 
       <div v-if="activePage === 'workspace'" class="topbar-selectors" aria-label="工作区选择">
         <label class="profile-select-wrap plan-select-wrap">
-          <span>仿真方案</span>
           <select :value="simulator.selectedScenarioId" @change="simulator.selectPlan(($event.target as HTMLSelectElement).value)">
             <option v-for="plan in simulator.simulationPlans" :key="plan.scenario.id" :value="plan.scenario.id">{{ plan.scenario.name }} · {{ plan.profile.name }}</option>
             <option v-if="!selectedPlan" :value="simulator.selectedScenarioId">{{ simulator.scenarioName }}（未保存）</option>

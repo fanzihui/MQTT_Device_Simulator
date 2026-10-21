@@ -31,10 +31,10 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 24
-          cache: 'pnpm'
-      
-       - name: Install dependencies
-        run: pnpm install
+          cache: 'npm'
+
+      - name: install frontend dependencies
+        run: npm ci
 
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -47,9 +47,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
-
-      - name: install frontend dependencies
-        run: npm install
 
       - name: validate updater signing secrets
         shell: pwsh
@@ -72,11 +69,11 @@ jobs:
         with:
           tagName: v__VERSION__ # 修复为标准的 v0.1.0 格式，以确保 latest.json 路由匹配
           releaseName: 'MQTT_Device_Simulator v__VERSION__'
-          releaseBody: '
+          releaseBody: |
             ## 下载建议
-            - Windows 常规安装：下载 `MQTT_Device_Simulator_*_x64-setup.exe`
-            `.sig` 和 `latest.json` 主要用于自动更新和签名校验，普通安装通常不需要手动下载。
-          '
+
+            Windows 常规安装请下载 `MQTT_Device_Simulator_*_x64-setup.exe`。
+            `.sig` 和 `latest.json` 用于自动更新和签名校验，普通安装通常不需要手动下载。
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
