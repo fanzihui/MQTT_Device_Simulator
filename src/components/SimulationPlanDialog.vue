@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
-import { IconChevronRight, IconDeviceFloppy, IconPlus, IconSchema, IconServer, IconSettings, IconX } from '@tabler/icons-vue'
+import { IconChevronRight, IconDeviceFloppy, IconInfoCircle, IconPlus, IconSchema, IconServer, IconSettings, IconX } from '@tabler/icons-vue'
 import type { MqttVersion, PayloadFormat, SimulationPlan } from '../types'
 
 const props = defineProps<{
+  initialMode?: 'list' | 'create'
   plans: SimulationPlan[]
   selectedScenarioId: string
+  activePassword: string
   selectPlan: (scenarioId: string) => Promise<void>
-  savePlan: (plan: SimulationPlan) => Promise<void>
+  savePlan: (plan: SimulationPlan, password?: string | null) => Promise<void>
   deletePlan: (scenarioId: string) => Promise<void>
 }>()
 
@@ -17,6 +19,9 @@ const dialogElement = ref<HTMLElement | null>(null)
 const mode = ref<'list' | 'create' | 'edit'>('list')
 const focusedScenarioId = ref(props.selectedScenarioId)
 const draft = ref<SimulationPlan | null>(null)
+const draftPassword = ref('')
+const initialDraftPassword = ref('')
+const editingActivePlan = ref(false)
 const pendingDeleteId = ref('')
 const errorMessage = ref('')
 const busy = ref(false)
@@ -47,6 +52,9 @@ function newPlan() {
   plan.scenario.name = `新仿真方案 ${nextNumber}`
   plan.scenario.profileId = plan.profile.id
   draft.value = plan
+  draftPassword.value = ''
+  initialDraftPassword.value = ''
+  editingActivePlan.value = false
   mode.value = 'create'
   pendingDeleteId.value = ''
   errorMessage.value = ''
@@ -54,6 +62,9 @@ function newPlan() {
 
 function editPlan(plan: SimulationPlan) {
   draft.value = clone(plan)
+  editingActivePlan.value = plan.scenario.id === props.selectedScenarioId
+  draftPassword.value = editingActivePlan.value ? props.activePassword : ''
+  initialDraftPassword.value = draftPassword.value
   mode.value = 'edit'
   pendingDeleteId.value = ''
   errorMessage.value = ''
@@ -122,7 +133,8 @@ async function saveDraft() {
   errorMessage.value = ''
   busy.value = true
   try {
-    await props.savePlan(next)
+    const passwordUpdate = draftPassword.value || (editingActivePlan.value && initialDraftPassword.value ? null : undefined)
+    await props.savePlan(next, passwordUpdate)
     focusedScenarioId.value = next.scenario.id
     draft.value = null
     mode.value = 'list'
@@ -173,6 +185,7 @@ function handleKeydown(event: KeyboardEvent) {
 onMounted(() => {
   window.addEventListener('keydown', handleKeydown)
   dialogElement.value?.focus()
+  if (props.initialMode === 'create') newPlan()
 })
 onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
 </script>
@@ -219,7 +232,7 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
               <IconChevronRight v-else class="plan-list-chevron" aria-hidden="true" :size="16" />
             </button>
           </div>
-          <p class="plan-list-footnote">删除方案时，如果连接仍被其他方案使用，将会保留该连接。</p>
+          <p class="plan-list-footnote"><IconInfoCircle aria-hidden="true" :size="14" />删除方案时，如果连接仍被其他方案使用，将会保留该连接。</p>
         </aside>
 
         <section class="plan-overview-pane">
@@ -262,9 +275,9 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
                   <button class="plan-danger-button compact" type="button" :disabled="busy" @click="confirmDelete">确认删除</button>
                 </div>
               </div>
-              <p v-else-if="plans.length <= 1" class="plan-minimum-hint">至少保留一个仿真方案。</p>
               <div v-else class="plan-action-row">
-                <button class="plan-danger-button" type="button" @click="pendingDeleteId = selectedPlan.scenario.id"><span class="plan-delete-mark">×</span>删除</button>
+                <button class="plan-danger-button" type="button" :disabled="plans.length <= 1" :title="plans.length <= 1 ? '至少保留一个仿真方案' : '删除此方案'" @click="pendingDeleteId = selectedPlan.scenario.id"><span class="plan-delete-mark">×</span>删除</button>
+                <span v-if="plans.length <= 1" class="plan-minimum-hint">至少保留一个方案</span>
                 <div class="plan-action-spacer" />
                 <button class="plan-secondary-button" type="button" @click="editPlan(selectedPlan)"><IconSettings aria-hidden="true" :size="15" />编辑方案</button>
                 <button v-if="selectedPlan.scenario.id !== selectedScenarioId" class="plan-primary-button" type="button" @click="select(selectedPlan)">切换到此方案<IconChevronRight aria-hidden="true" :size="15" /></button>
@@ -295,23 +308,27 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
               <span class="plan-section-index">01</span>
             </div>
             <div class="plan-fields">
-              <label class="plan-field full"><span>连接名称</span><input v-model="draft.profile.name" required maxlength="60" placeholder="例如：实验室 Broker" /></label>
-              <label class="plan-field full"><span>Broker 地址</span><input v-model="draft.profile.host" required maxlength="255" placeholder="broker.example.com" /></label>
+              <label class="plan-field full"><span>连接名称<span class="required-mark" aria-hidden="true">*</span></span><input v-model="draft.profile.name" required maxlength="60" placeholder="例如：实验室 Broker" /></label>
+              <label class="plan-field full"><span>Broker 地址<span class="required-mark" aria-hidden="true">*</span></span><input v-model="draft.profile.host" required maxlength="255" placeholder="broker.example.com" /></label>
               <div class="plan-field-pair">
-                <label class="plan-field"><span>端口</span><input v-model.number="draft.profile.port" type="number" min="1" max="65535" required /></label>
+                <label class="plan-field"><span>端口<span class="required-mark" aria-hidden="true">*</span></span><input v-model.number="draft.profile.port" type="number" min="1" max="65535" required /></label>
                 <label class="plan-field"><span>MQTT 版本</span><select :value="draft.profile.mqttVersion" @change="setMqttVersion"><option value="5.0">MQTT 5.0</option><option value="3.1.1">MQTT 3.1.1</option></select></label>
               </div>
+              <label v-if="draft.profile.mqttVersion === '5.0'" class="plan-field full"><span>Session 过期时间 <small>秒，0 表示不保留会话</small></span><input v-model.number="draft.profile.sessionExpirySeconds" type="number" min="0" step="1" /></label>
               <label class="plan-field full"><span>用户名 <small>可选</small></span><input v-model="draft.profile.username" autocomplete="off" placeholder="匿名连接时留空" /></label>
+              <label v-if="mode === 'create' || editingActivePlan" class="plan-field full"><span>密码 <small>可选</small></span><input v-model="draftPassword" type="password" autocomplete="new-password" placeholder="仅在本次运行中保留" /></label>
               <label class="plan-field full"><span>CA 证书路径 <small>启用 TLS 时可选</small></span><input v-model="draft.profile.caCertPath" placeholder="证书文件路径" /></label>
               <label class="plan-toggle-row">
                 <span class="plan-toggle-copy"><strong>启用 TLS 加密</strong><small>使用安全传输连接 Broker</small></span>
-                <input v-model="draft.profile.useTls" type="checkbox" />
+                <input v-model="draft.profile.useTls" type="checkbox" role="switch" />
               </label>
+              <label class="plan-field full"><span>模拟设备数<span class="required-mark" aria-hidden="true">*</span></span><input v-model.number="draft.scenario.deviceBatch.count" type="number" min="1" max="100" required /></label>
               <div class="plan-field-pair">
-                <label class="plan-field"><span>模拟设备数</span><input v-model.number="draft.scenario.deviceBatch.count" type="number" min="1" max="100" required /></label>
                 <label class="plan-field"><span>设备 ID 前缀</span><input v-model="draft.scenario.deviceBatch.deviceIdPrefix" maxlength="48" /></label>
+                <label class="plan-field"><span>客户端 ID 前缀</span><input v-model="draft.scenario.deviceBatch.clientIdPrefix" maxlength="48" /></label>
               </div>
             </div>
+            <p v-if="mode === 'create' || editingActivePlan" class="plan-secret-note">连接密码仅保存在当前应用会话内，不会写入方案文件。</p>
             <p v-if="mode === 'edit' && sharedConnectionCount > 1" class="plan-shared-note">此连接还被 {{ sharedConnectionCount - 1 }} 个仿真方案使用，保存后连接设置会同步更新。</p>
           </section>
 
@@ -322,19 +339,19 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
               <span class="plan-section-index">02</span>
             </div>
             <div class="plan-fields">
-              <label class="plan-field full"><span>方案名称</span><input v-model="draft.scenario.name" required maxlength="60" placeholder="例如：温湿度遥测" /></label>
-              <label class="plan-field full"><span>发布主题</span><input v-model="draft.scenario.topicTemplate" required placeholder="sensors/{{deviceId}}/telemetry" class="plan-mono-input" /></label>
+              <label class="plan-field full"><span>方案名称<span class="required-mark" aria-hidden="true">*</span></span><input v-model="draft.scenario.name" required maxlength="60" placeholder="例如：温湿度遥测" /></label>
+              <label class="plan-field full"><span>发布主题<span class="required-mark" aria-hidden="true">*</span></span><input v-model="draft.scenario.topicTemplate" required placeholder="sensors/{{deviceId}}/telemetry" class="plan-mono-input" /></label>
               <div class="plan-field-pair">
                 <label class="plan-field"><span>载荷格式</span><select :value="draft.scenario.payloadFormat" @change="setPayloadFormat"><option value="json">JSON</option><option value="protobuf">Protobuf</option></select></label>
                 <label class="plan-field"><span>QoS</span><select :value="draft.scenario.qos" @change="setQos"><option :value="0">QoS 0</option><option :value="1">QoS 1</option><option :value="2">QoS 2</option></select></label>
               </div>
               <div class="plan-field-pair">
-                <label class="plan-field"><span>发送间隔（秒）</span><input v-model.number="intervalSeconds" type="number" min="0.1" step="0.1" required /></label>
+                <label class="plan-field"><span>发送间隔（秒）<span class="required-mark" aria-hidden="true">*</span></span><input v-model.number="intervalSeconds" type="number" min="0.1" step="0.1" required /></label>
                 <label class="plan-field"><span>每设备发送次数 <small>留空为不限</small></span><input :value="draft.scenario.publishCountPerDevice ?? ''" type="number" min="1" placeholder="不限" @input="setPublishCount" /></label>
               </div>
               <label class="plan-toggle-row">
                 <span class="plan-toggle-copy"><strong>保留消息</strong><small>Broker 保存该主题的最后一条消息</small></span>
-                <input v-model="draft.scenario.retain" type="checkbox" />
+                <input v-model="draft.scenario.retain" type="checkbox" role="switch" />
               </label>
               <div class="plan-payload-note"><span>载荷编辑</span><p>JSON 模板与 Protobuf Schema 可在工作台的「消息载荷」区域继续编辑。</p></div>
             </div>
@@ -353,60 +370,61 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
 
 <style scoped>
 .plan-dialog-backdrop { z-index: 210; padding: 22px; }
-.plan-dialog { width: min(1120px, 100%); max-height: min(800px, calc(100dvh - 44px)); display: flex; flex-direction: column; border-color: color-mix(in srgb, var(--line-strong) 72%, var(--accent)); border-radius: 16px; }
-.plan-dialog-header { min-height: 100px; display: flex; align-items: center; justify-content: space-between; gap: 22px; padding: 20px 24px; border-bottom: 1px solid var(--line); background: linear-gradient(112deg, color-mix(in srgb, var(--accent-soft) 55%, var(--surface)) 0%, var(--surface) 53%); }
-.plan-dialog-heading { min-width: 0; display: flex; align-items: center; gap: 15px; }
-.plan-brand-mark { width: 46px; height: 46px; display: grid; flex: 0 0 46px; place-items: center; border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent); border-radius: 12px; color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 1px 0 color-mix(in srgb, white 8%, transparent); }
+.plan-dialog { width: min(1120px, 100%); max-height: min(800px, calc(100dvh - 44px)); display: flex; flex-direction: column; border-color: var(--line); border-radius: 16px; }
+.plan-dialog-header { min-height: 108px; display: flex; align-items: center; justify-content: space-between; gap: 22px; padding: 24px 28px; border-bottom: 1px solid var(--line); background: var(--surface); }
+.plan-dialog-heading { min-width: 0; display: flex; align-items: center; gap: 14px; }
+.plan-brand-mark { width: 46px; height: 46px; display: grid; flex: 0 0 46px; place-items: center; border: 0; border-radius: 10px; color: var(--accent-strong); background: var(--accent-soft); }
 .plan-eyebrow { margin: 0 0 5px; color: var(--accent); font: 700 9px var(--font-mono); letter-spacing: .13em; }
-.plan-dialog-heading h2 { margin: 0; color: var(--ink); font-size: 21px; font-weight: 720; letter-spacing: -.035em; }
-.plan-dialog-description { margin: 4px 0 0; color: var(--muted); font-size: 11px; }
+.plan-dialog-heading h2 { margin: 0; color: var(--ink); font-size: 20px; font-weight: 650; letter-spacing: -.025em; }
+.plan-dialog-description { margin: 5px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
 .plan-dialog-header-actions { display: flex; align-items: center; gap: 9px; flex: 0 0 auto; }
 .plan-count { color: var(--muted); font-size: 11px; white-space: nowrap; }
 .plan-count strong { color: var(--ink); font: 650 12px var(--font-mono); }
-.plan-create-button, .plan-primary-button, .plan-secondary-button, .plan-danger-button, .plan-back-button { min-height: 36px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid transparent; border-radius: 7px; padding: 0 12px; font-size: 11px; font-weight: 700; white-space: nowrap; cursor: pointer; transition: .14s ease; }
-.plan-create-button, .plan-primary-button { border-color: var(--accent); color: #062126; background: var(--accent); }
-.plan-create-button:hover, .plan-primary-button:hover:not(:disabled) { border-color: var(--accent-strong); background: var(--accent-strong); }
+.plan-create-button, .plan-primary-button, .plan-secondary-button, .plan-danger-button, .plan-back-button { min-height: 38px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; border: 1px solid transparent; border-radius: 7px; padding: 0 14px; font-size: 12px; font-weight: 650; white-space: nowrap; cursor: pointer; transition: color .14s ease, background .14s ease, border-color .14s ease, box-shadow .14s ease; }
+.plan-create-button, .plan-primary-button { border-color: var(--accent-strong); color: #fff; background: var(--accent-strong); box-shadow: 0 1px 2px rgb(15 23 42 / 13%); }
+.plan-create-button:hover, .plan-primary-button:hover:not(:disabled) { border-color: #155e75; background: #155e75; box-shadow: 0 2px 5px rgb(15 23 42 / 18%); }
 .plan-create-button { min-height: 34px; }
-.plan-secondary-button, .plan-back-button { border-color: var(--line-strong); color: var(--ink-soft); background: var(--surface-raised); }
-.plan-secondary-button:hover:not(:disabled), .plan-back-button:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
-.plan-danger-button { border-color: color-mix(in srgb, var(--danger) 26%, var(--line)); color: var(--danger); background: color-mix(in srgb, var(--danger-soft) 50%, var(--surface)); }
-.plan-danger-button:hover:not(:disabled) { border-color: var(--danger); background: var(--danger-soft); }
+.plan-secondary-button, .plan-back-button { border-color: var(--line-strong); color: var(--ink-soft); background: var(--surface); }
+.plan-secondary-button:hover:not(:disabled), .plan-back-button:hover { border-color: var(--line-strong); color: var(--ink); background: var(--surface-raised); }
+.plan-danger-button { border-color: transparent; color: var(--danger); background: transparent; }
+.plan-danger-button:hover:not(:disabled) { border-color: transparent; background: var(--danger-soft); }
 .plan-primary-button:disabled, .plan-secondary-button:disabled, .plan-danger-button:disabled { opacity: .55; cursor: wait; }
 .dialog-close-button { flex: 0 0 34px; }
 .plan-manager-content { min-height: 0; flex: 1; display: grid; grid-template-columns: minmax(265px, .78fr) minmax(0, 1.42fr); }
-.plan-list-pane { min-width: 0; min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--line); background: var(--surface-muted); }
-.plan-list-heading { min-height: 56px; display: flex; flex-direction: column; justify-content: center; gap: 3px; padding: 0 18px; border-bottom: 1px solid var(--line); }
-.plan-list-heading > span { color: var(--ink-soft); font-size: 11px; font-weight: 700; }
-.plan-list-heading small { color: var(--subtle); font-size: 9px; }
-.plan-list-scroll { flex: 1; min-height: 0; overflow: auto; padding: 8px; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
-.plan-list-item { width: 100%; min-width: 0; display: flex; align-items: center; gap: 10px; margin-bottom: 5px; border: 1px solid transparent; border-radius: 9px; padding: 10px 9px; color: var(--ink-soft); background: transparent; text-align: left; cursor: pointer; transition: border-color .14s ease, background .14s ease; }
-.plan-list-item:hover { border-color: var(--line); background: var(--surface); }
-.plan-list-item.active { border-color: color-mix(in srgb, var(--accent) 34%, var(--line)); background: color-mix(in srgb, var(--accent-soft) 57%, var(--surface)); }
+.plan-list-pane { min-width: 0; min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--line); background: color-mix(in srgb, var(--surface-muted) 72%, transparent); }
+.plan-list-heading { min-height: 62px; display: flex; flex-direction: column; justify-content: center; gap: 4px; padding: 0 20px; border-bottom: 1px solid var(--line); }
+.plan-list-heading > span { color: var(--ink-soft); font-size: 13px; font-weight: 650; }
+.plan-list-heading small { color: var(--subtle); font-size: 11px; }
+.plan-list-scroll { flex: 1; min-height: 0; overflow: auto; padding: 12px; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+.plan-list-item { width: 100%; min-width: 0; display: flex; align-items: center; gap: 11px; margin-bottom: 7px; border: 1px solid transparent; border-left: 4px solid transparent; border-radius: 9px; padding: 11px 10px; color: var(--ink-soft); background: color-mix(in srgb, var(--line) 28%, var(--surface)); text-align: left; cursor: pointer; transition: color .14s ease, border-color .14s ease, background .14s ease, box-shadow .14s ease; }
+.plan-list-item:hover { border-color: transparent; background: color-mix(in srgb, var(--line) 55%, var(--surface)); }
+.plan-list-item.active { border-color: transparent; border-left-color: var(--accent); background: var(--surface); box-shadow: 0 2px 8px -4px rgb(15 23 42 / 24%); }
 .plan-list-icon { width: 34px; height: 34px; display: grid; flex: 0 0 34px; place-items: center; border-radius: 8px; color: var(--muted); background: var(--surface-raised); }
 .plan-list-item.active .plan-list-icon { color: var(--accent); background: var(--accent-soft); }
 .plan-list-copy { min-width: 0; display: grid; flex: 1; gap: 3px; }
 .plan-list-copy strong, .plan-list-copy small, .plan-list-endpoint { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.plan-list-copy strong { color: var(--ink); font-size: 11px; font-weight: 700; }
-.plan-list-copy small { color: var(--muted); font-size: 9px; }
-.plan-list-endpoint { color: var(--subtle); font: 9px var(--font-mono); }
-.current-plan-badge { flex: 0 0 auto; border-radius: 4px; padding: 4px 6px; color: var(--green); background: var(--green-soft); font-size: 9px; font-weight: 700; }
+.plan-list-copy strong { color: var(--ink); font-size: 12px; font-weight: 650; }
+.plan-list-copy small { color: var(--muted); font-size: 10px; }
+.plan-list-endpoint { color: var(--subtle); font: 10px var(--font-mono); }
+.current-plan-badge { flex: 0 0 auto; border-radius: 5px; padding: 4px 7px; color: var(--green); background: var(--green-soft); font-size: 10px; font-weight: 650; }
 .plan-list-chevron { flex: 0 0 auto; color: var(--subtle); }
-.plan-list-footnote { margin: 0; padding: 11px 15px; border-top: 1px solid var(--line); color: var(--subtle); font-size: 9px; line-height: 1.5; }
-.plan-overview-pane { min-width: 0; min-height: 0; display: flex; flex-direction: column; padding: 24px; overflow: auto; }
+.plan-list-footnote { display: flex; align-items: flex-start; gap: 7px; margin: 0; padding: 13px 18px; border-top: 1px solid var(--line); color: var(--subtle); font-size: 11px; line-height: 1.55; }
+.plan-list-footnote svg { flex: 0 0 auto; margin-top: 1px; color: var(--subtle); }
+.plan-overview-pane { min-width: 0; min-height: 0; display: flex; flex-direction: column; padding: 28px; overflow: auto; background: var(--surface); }
 .plan-overview-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding-bottom: 19px; border-bottom: 1px solid var(--line); }
-.plan-overview-heading h3 { overflow: hidden; margin: 2px 0 5px; color: var(--ink); font-size: 19px; font-weight: 720; letter-spacing: -.03em; text-overflow: ellipsis; white-space: nowrap; }
-.plan-overview-heading > div > p:last-child { margin: 0; color: var(--muted); font-size: 10px; }
+.plan-overview-heading h3 { overflow: hidden; margin: 2px 0 5px; color: var(--ink); font-size: 21px; font-weight: 650; letter-spacing: -.025em; text-overflow: ellipsis; white-space: nowrap; }
+.plan-overview-heading > div > p:last-child { margin: 0; color: var(--muted); font-size: 12px; }
 .plan-heading-dot { padding: 0 5px; color: var(--subtle); }
-.plan-protocol-badge { flex: 0 0 auto; border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; color: var(--accent); background: var(--surface-muted); font: 10px var(--font-mono); }
-.plan-summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 11px; margin-top: 18px; }
-.plan-summary-card { min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 13px 14px; background: var(--surface-muted); }
-.plan-summary-title { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
-.plan-summary-icon { width: 26px; height: 26px; display: grid; place-items: center; border-radius: 6px; color: var(--accent); background: var(--accent-soft); }
-.plan-summary-title strong { color: var(--ink-soft); font-size: 10px; }
-.plan-summary-card dl { display: grid; gap: 8px; margin: 0; }
-.plan-summary-card dl > div { min-width: 0; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.plan-summary-card dt { flex: 0 0 auto; color: var(--subtle); font-size: 9px; }
-.plan-summary-card dd { min-width: 0; margin: 0; overflow: hidden; color: var(--ink-soft); font-size: 9px; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
+.plan-protocol-badge { flex: 0 0 auto; border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; color: var(--accent); background: var(--surface-muted); font: 11px var(--font-mono); }
+.plan-summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 22px; }
+.plan-summary-card { min-width: 0; border: 1px solid var(--line); border-radius: 10px; padding: 18px; background: var(--surface); }
+.plan-summary-title { display: flex; align-items: center; gap: 9px; margin-bottom: 14px; }
+.plan-summary-icon { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 8px; color: var(--accent-strong); background: var(--accent-soft); }
+.plan-summary-title strong { color: var(--ink); font-size: 13px; font-weight: 650; }
+.plan-summary-card dl { display: grid; gap: 11px; margin: 0; }
+.plan-summary-card dl > div { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 18px; }
+.plan-summary-card dt { flex: 0 0 auto; color: var(--muted); font-size: 12px; }
+.plan-summary-card dd { min-width: 0; margin: 0; overflow: hidden; color: var(--ink); font-size: 12px; font-weight: 550; text-align: right; text-overflow: ellipsis; white-space: nowrap; }
 .plan-summary-card dd.plan-topic-value { font-family: var(--font-mono); }
 .plan-overview-footer { min-height: 54px; margin-top: auto; padding-top: 18px; }
 .plan-action-row { display: flex; align-items: center; gap: 8px; }
@@ -426,41 +444,47 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
 .plan-empty-state strong { color: var(--ink); font-size: 13px; }
 .plan-empty-state small { max-width: 280px; margin-bottom: 5px; font-size: 10px; line-height: 1.55; }
 .plan-form-content { min-height: 0; flex: 1; display: flex; flex-direction: column; overflow: auto; }
-.plan-form-intro { display: flex; align-items: center; gap: 12px; padding: 12px 24px; border-bottom: 1px solid var(--line); background: var(--surface-muted); }
-.plan-form-step { flex: 0 0 auto; border: 1px solid var(--line); border-radius: 5px; padding: 5px 7px; color: var(--accent); background: var(--surface); font: 700 8px var(--font-mono); letter-spacing: .08em; }
-.plan-form-intro p { margin: 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
-.plan-form-grid { min-height: 0; flex: 1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; gap: 14px; overflow: auto; padding: 18px 22px; }
-.plan-edit-card { min-width: 0; border: 1px solid var(--line); border-radius: 11px; padding: 16px; background: var(--surface-muted); }
-.plan-edit-card-heading { display: flex; align-items: center; gap: 10px; padding-bottom: 13px; border-bottom: 1px solid var(--line); }
+.plan-form-intro { display: flex; align-items: center; gap: 12px; padding: 16px 28px; border-bottom: 1px solid var(--line); background: var(--surface-muted); }
+.plan-form-step { flex: 0 0 auto; border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line)); border-radius: 999px; padding: 6px 9px; color: var(--accent-strong); background: var(--accent-soft); font: 700 9px/1 var(--font-mono); letter-spacing: .08em; }
+.plan-form-intro p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.plan-form-grid { min-height: 0; flex: 1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-content: start; gap: 16px; overflow: auto; padding: 22px 28px; }
+.plan-edit-card { min-width: 0; border: 1px solid var(--line); border-radius: 12px; padding: 22px; background: var(--surface); }
+.plan-edit-card-heading { display: flex; align-items: center; gap: 11px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
 .plan-edit-icon { width: 34px; height: 34px; display: grid; flex: 0 0 34px; place-items: center; border-radius: 8px; }
 .connection-edit-icon { color: var(--accent); background: var(--accent-soft); }
 .scenario-edit-icon { color: var(--green); background: var(--green-soft); }
 .plan-edit-card-heading > div { min-width: 0; }
-.plan-edit-card-heading h3 { margin: 0; color: var(--ink); font-size: 12px; font-weight: 720; }
-.plan-edit-card-heading p { margin: 3px 0 0; color: var(--muted); font-size: 9px; }
-.plan-section-index { margin-left: auto; color: var(--subtle); font: 10px var(--font-mono); }
-.plan-fields { display: grid; gap: 12px; padding-top: 13px; }
-.plan-field { min-width: 0; display: grid; align-content: start; gap: 6px; }
-.plan-field > span { color: var(--ink-soft); font-size: 9px; font-weight: 650; }
-.plan-field > span small { color: var(--subtle); font-size: 8px; font-weight: 400; }
-.plan-field input, .plan-field select { width: 100%; min-width: 0; height: 34px; border: 1px solid var(--line-strong); border-radius: 6px; outline: none; padding: 0 9px; color: var(--ink); background: var(--surface-input); font-size: 10px; }
-.plan-field input::placeholder { color: var(--subtle); }
-.plan-field input:focus, .plan-field select:focus { border-color: var(--focus-ring); box-shadow: 0 0 0 2px color-mix(in srgb, var(--focus-ring) 19%, transparent); }
+.plan-edit-card-heading h3 { margin: 0; color: var(--ink); font-size: 14px; font-weight: 650; }
+.plan-edit-card-heading p { margin: 4px 0 0; color: var(--muted); font-size: 11px; }
+.plan-section-index { margin-left: auto; border-radius: 999px; padding: 5px 8px; color: var(--muted); background: var(--surface-muted); font: 10px var(--font-mono); }
+.plan-fields { display: grid; gap: 16px; padding-top: 16px; }
+.plan-field { min-width: 0; display: grid; align-content: start; gap: 7px; }
+.plan-field > span { color: var(--ink-soft); font-size: 12px; font-weight: 600; }
+.plan-field > span small { color: var(--muted); font-size: 10px; font-weight: 450; }
+.plan-field input, .plan-field select { width: 100%; min-width: 0; height: 38px; border: 1px solid var(--line); border-radius: 6px; outline: none; padding: 0 11px; color: var(--ink); background: var(--surface-input); font-size: 12px; transition: border-color .14s ease, box-shadow .14s ease, background .14s ease; }
+.plan-field input::placeholder { color: var(--placeholder); opacity: 1; }
+.plan-field input:focus, .plan-field select:focus { border-color: var(--focus-ring); box-shadow: 0 0 0 2px color-mix(in srgb, var(--focus-ring) 20%, transparent); }
 .plan-field.full { grid-column: 1 / -1; }
 .plan-field-pair { min-width: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .plan-mono-input { font-family: var(--font-mono) !important; }
-.plan-toggle-row { min-height: 50px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; background: var(--surface); cursor: pointer; }
+.plan-toggle-row { min-height: 62px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid var(--line); border-radius: 8px; padding: 11px 13px; background: var(--surface-raised); cursor: pointer; }
 .plan-toggle-copy { min-width: 0; display: grid; gap: 3px; }
-.plan-toggle-copy strong { color: var(--ink-soft); font-size: 9px; }
-.plan-toggle-copy small { color: var(--muted); font-size: 8px; }
-.plan-toggle-row input { width: 15px; height: 15px; flex: 0 0 auto; accent-color: var(--accent-strong); }
-.plan-shared-note { margin: 12px 0 0; border-left: 2px solid var(--amber); padding: 6px 8px; color: var(--muted); background: var(--amber-soft); font-size: 9px; line-height: 1.5; }
-.plan-payload-note { border: 1px solid var(--line); border-radius: 7px; padding: 9px 10px; background: var(--surface); }
-.plan-payload-note span { color: var(--ink-soft); font-size: 9px; font-weight: 700; }
-.plan-payload-note p { margin: 4px 0 0; color: var(--muted); font-size: 9px; line-height: 1.5; }
-.plan-form-footer { min-height: 60px; display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: auto; border-top: 1px solid var(--line); padding: 10px 22px; background: var(--surface); }
+.plan-toggle-copy strong { color: var(--ink-soft); font-size: 12px; font-weight: 600; }
+.plan-toggle-copy small { color: var(--muted); font-size: 10px; }
+.plan-toggle-row input { appearance: none; position: relative; width: 42px; height: 24px; flex: 0 0 42px; margin: 0; border: 0; border-radius: 999px; padding: 0; background: #cbd5e1; cursor: pointer; transition: background .18s ease, box-shadow .18s ease; }
+.plan-toggle-row input::before { position: absolute; top: 4px; left: 4px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgb(15 23 42 / 24%); content: ''; transition: transform .18s cubic-bezier(.2,.8,.2,1); }
+.plan-toggle-row input:checked { background: var(--accent-strong); }
+.plan-toggle-row input:checked::before { transform: translateX(18px); }
+.plan-toggle-row input:focus-visible { outline: 0; box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus-ring) 25%, transparent); }
+:root:not([data-theme='light']) .plan-toggle-row input:not(:checked) { background: #475569; }
+.plan-secret-note { margin: 10px 0 0; color: var(--subtle); font-size: 10px; line-height: 1.5; }
+.plan-shared-note { margin: 12px 0 0; border-left: 2px solid var(--amber); padding: 8px 10px; color: var(--muted); background: var(--amber-soft); font-size: 11px; line-height: 1.5; }
+.plan-payload-note { border: 1px solid var(--line); border-radius: 8px; padding: 11px 12px; background: var(--surface); }
+.plan-payload-note span { color: var(--ink-soft); font-size: 11px; font-weight: 650; }
+.plan-payload-note p { margin: 5px 0 0; color: var(--muted); font-size: 11px; line-height: 1.55; }
+.plan-form-footer { min-height: 68px; display: flex; align-items: center; justify-content: space-between; gap: 14px; margin-top: auto; border-top: 1px solid var(--line); padding: 12px 28px; background: var(--surface); }
 .plan-form-footer > div { display: flex; flex: 0 0 auto; gap: 8px; }
-.plan-form-caption, .plan-form-error { margin: 0; color: var(--subtle); font-size: 9px; line-height: 1.45; }
+.plan-form-caption, .plan-form-error { margin: 0; color: var(--subtle); font-size: 11px; line-height: 1.45; }
 .plan-form-error { color: var(--danger); }
 
 @media (max-width: 800px) {
@@ -474,7 +498,7 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
 }
 @media (max-width: 540px) {
   .plan-dialog-backdrop { padding: 6px; }
-  .plan-dialog { max-height: calc(100dvh - 12px); border-radius: 12px; }
+  .plan-dialog { max-height: calc(100dvh - 12px); border-radius: 16px; }
   .plan-dialog-header { min-height: 78px; gap: 8px; padding: 12px; }
   .plan-dialog-heading { gap: 9px; }
   .plan-brand-mark { width: 36px; height: 36px; flex-basis: 36px; border-radius: 9px; }

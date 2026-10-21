@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { IconActivity, IconArrowDownLeft, IconArrowUpRight, IconMaximize, IconMinimize } from '@tabler/icons-vue'
+import { IconActivity, IconArrowDownLeft, IconArrowUpRight, IconListDetails, IconMaximize, IconMinimize } from '@tabler/icons-vue'
 import type { MessageEntry, ProtoSchemaEntry, SystemLogEntry } from '../types'
 import { bytesFromHex, decodeProtoMessage, listProtoMessageTypes, parseProtoSchema } from '../lib/payload'
 
@@ -88,7 +88,7 @@ onUnmounted(() => {
   <section class="panel-card activity-card" :class="{ 'is-fullscreen': isFullscreen }">
     <div class="activity-topbar">
       <div class="activity-title">
-        <div class="activity-icon"><IconActivity aria-hidden="true" :size="19" :stroke-width="1.8" /></div>
+        <div class="activity-icon"><IconListDetails aria-hidden="true" :size="19" :stroke-width="1.8" /></div>
         <div><h2>消息记录</h2></div>
       </div>
       <div class="activity-tabs" role="tablist">
@@ -107,17 +107,18 @@ onUnmounted(() => {
     <div v-if="tab !== 'logs'" class="activity-content">
       <div class="message-list">
         <div class="table-head">
-          <span>主题</span><span>设备</span><span>QoS</span><span>状态</span><span>时间</span>
+          <span>主题</span><span>设备</span><span>消息载荷</span><span>QoS</span><span>状态</span><span>时间</span>
         </div>
         <button v-for="entry in visibleMessages.slice().reverse()" :key="entry.id" class="message-row" :class="{ selected: selectedMessageId === entry.id }" type="button" @click="selectMessage(entry)">
           <span class="message-topic mono"><IconArrowUpRight v-if="entry.direction === 'out'" aria-hidden="true" class="out-arrow" :size="15" /><IconArrowDownLeft v-else aria-hidden="true" class="in-arrow" :size="15" />{{ entry.topic }}</span>
           <span class="message-device mono">{{ entry.deviceId || '订阅客户端' }}</span>
+          <span class="message-payload mono">{{ entry.payloadPreview || entry.payloadHex || '（空载荷）' }}</span>
           <span class="message-qos">{{ entry.qos }}</span>
           <span class="message-status"><i />{{ entry.direction === 'out' ? (entry.qos === 0 ? '已发送·未确认' : '已确认') : entry.retain ? '保留消息' : '已接收' }}</span>
           <span class="message-time mono">{{ formatTime(entry.timestamp) }}</span>
         </button>
         <div v-if="!visibleMessages.length" class="empty-activity">
-          <IconActivity aria-hidden="true" class="empty-activity-icon" :size="26" :stroke-width="1.5" />
+          <IconActivity aria-hidden="true" class="empty-activity-icon" :size="48" :stroke-width="1.25" />
           <strong>{{ tab === 'published' ? '还没有发送消息' : '还没有收到消息' }}</strong>
           <small>{{ tab === 'published' ? '连接设备并开始发送后，消息会显示在这里。' : '启动订阅监听后，Broker 消息会显示在这里。' }}</small>
         </div>
@@ -176,14 +177,14 @@ onUnmounted(() => {
 <style scoped>
 .activity-card { min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .activity-card.is-fullscreen { position: fixed; inset: 14px; z-index: 120; width: auto; height: auto; min-height: 0; max-height: none; overflow: hidden; border-color: var(--line-strong); border-radius: 12px; box-shadow: 0 24px 90px #0008; }
-.activity-topbar { min-height: 58px; display: flex; align-items: center; gap: 18px; padding: 0 14px; border-bottom: 1px solid var(--line); }
+.activity-topbar { min-height: 62px; display: flex; align-items: center; gap: 18px; padding: 0 18px; border-bottom: 1px solid var(--line); }
 .activity-title { display: flex; align-items: center; gap: 9px; flex: 0 0 auto; }
 .activity-icon { width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 7px; color: var(--accent); background: var(--accent-soft); }
 .activity-title h2 { margin: 0; color: var(--ink); font-size: 13px; font-weight: 700; }
 .activity-tabs { align-self: stretch; display: flex; align-items: stretch; gap: 14px; margin-left: auto; }
-.activity-tabs button { display: flex; align-items: center; gap: 6px; padding: 0 2px; border: 0; border-bottom: 2px solid transparent; color: var(--muted); background: transparent; font-size: 11px; font-weight: 600; cursor: pointer; }
+.activity-tabs button { display: flex; align-items: center; gap: 6px; padding: 0 2px; border: 0; border-bottom: 2px solid transparent; color: var(--muted); background: transparent; font-size: 11px; font-weight: 500; cursor: pointer; transition: color .14s ease, border-color .14s ease; }
 .activity-tabs button:hover { color: var(--ink); }
-.activity-tabs button.active { color: var(--accent); border-bottom-color: var(--accent); }
+.activity-tabs button.active { color: var(--ink); border-bottom-color: var(--accent); font-weight: 750; }
 .activity-tabs button span { min-width: 19px; padding: 3px 5px; border-radius: 4px; color: var(--muted); background: var(--surface-raised); font: 10px var(--font-mono); text-align: center; }
 .activity-tabs button.active span { color: var(--accent); background: var(--accent-soft); }
 .activity-cap { color: var(--subtle); font-size: 10px; white-space: nowrap; }
@@ -192,9 +193,9 @@ onUnmounted(() => {
 .activity-content { flex: 1; min-width: 0; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.18fr) minmax(260px, .82fr); }
 .activity-content > * { min-width: 0; }
 .message-list { min-width: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
-.table-head, .message-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(75px, .85fr) 34px minmax(100px, .9fr) 68px; align-items: center; gap: 9px; }
-.table-head { position: sticky; top: 0; z-index: 1; min-width: 570px; height: 34px; padding: 0 13px; color: var(--muted); background: var(--surface-muted); border-bottom: 1px solid var(--line); font-size: 10px; font-weight: 600; }
-.message-row { width: 100%; min-width: 570px; min-height: 38px; padding: 0 13px; border: 0; border-bottom: 1px solid var(--line); color: var(--ink-soft); background: var(--surface); text-align: left; cursor: pointer; transition: background .12s ease; }
+.table-head, .message-row { display: grid; grid-template-columns: minmax(150px, 1.2fr) minmax(90px, .72fr) minmax(170px, 1.35fr) 52px 124px 92px; align-items: center; gap: 12px; }
+.table-head { position: sticky; top: 0; z-index: 1; min-width: 820px; height: 38px; padding: 0 16px; color: var(--muted); background: color-mix(in srgb, var(--surface-muted) 68%, transparent); border-bottom: 1px solid var(--line); font-size: 10px; font-weight: 500; letter-spacing: .035em; text-transform: uppercase; }
+.message-row { width: 100%; min-width: 820px; min-height: 42px; padding: 0 16px; border: 0; border-bottom: 1px solid var(--line); color: var(--ink-soft); background: var(--surface); text-align: left; cursor: pointer; transition: background .12s ease; }
 .message-row:hover { background: var(--surface-raised); }
 .message-row.selected { background: var(--accent-soft); }
 .message-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -203,13 +204,16 @@ onUnmounted(() => {
 .out-arrow { flex: 0 0 auto; color: var(--green); }
 .in-arrow { flex: 0 0 auto; color: var(--accent); }
 .message-device, .message-time { color: var(--muted); font-size: 10px; }
-.message-qos { color: var(--muted); font: 10px var(--font-mono); }
-.message-status { display: flex; align-items: center; gap: 6px; color: var(--green); font-size: 10px; font-weight: 600; }
+.message-payload { color: var(--subtle); font-size: 10px; }
+.message-qos { color: var(--muted); font: 10px var(--font-mono); text-align: center; }
+.message-status { display: flex; align-items: center; justify-content: center; gap: 6px; color: var(--green); font-size: 10px; font-weight: 600; white-space: nowrap; }
+.message-time { text-align: center; }
 .message-status i { width: 6px; height: 6px; flex: 0 0 6px; border-radius: 50%; background: var(--green); }
 .message-row:has(.in-arrow) .message-status { color: var(--accent); }
 .message-row:has(.in-arrow) .message-status i { background: var(--accent); }
-.empty-activity { min-height: 140px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 8px; color: var(--muted); text-align: center; padding: 16px; }
-.empty-activity-icon { color: var(--subtle); }
+.empty-activity { min-height: 180px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 10px; color: var(--muted); text-align: center; padding: 24px 16px; }
+.empty-activity-icon { margin-bottom: 3px; color: #e2e8f0; }
+:root:not([data-theme='light']) .empty-activity-icon { color: #334155; }
 .empty-activity strong { color: var(--ink-soft); font-size: 12px; }
 .empty-activity small { max-width: 360px; color: var(--muted); font-size: 11px; line-height: 1.5; }
 .message-detail { min-width: 0; display: flex; flex-direction: column; border-left: 1px solid var(--line); background: var(--surface-muted); }
@@ -248,7 +252,8 @@ onUnmounted(() => {
 .activity-card.is-fullscreen .detail-body { flex: 1; display: flex; flex-direction: column; gap: 4px; padding: 16px; }
 .activity-card.is-fullscreen .payload-pre { max-height: none; min-height: 150px; flex: 1; font-size: 12px; }
 .activity-card.is-fullscreen .message-row { min-height: 46px; }
-.activity-card.is-fullscreen .log-row { min-height: 42px; }
+.activity-card.is-fullscreen .log-row { min-height: 42px; align-items: start; padding-block: 9px; }
+.activity-card.is-fullscreen .log-message { overflow: visible; overflow-wrap: anywhere; text-overflow: clip; white-space: normal; line-height: 1.55; }
 @media (max-width: 1120px) {
   .activity-card { min-height: 372px; }
   .activity-content { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(150px, auto) minmax(160px, 230px); }
@@ -265,7 +270,7 @@ onUnmounted(() => {
   .activity-card.is-fullscreen .activity-topbar { gap: 0 10px; padding: 8px 10px 0; }
   .activity-card.is-fullscreen .activity-content { grid-template-rows: minmax(200px, .9fr) minmax(220px, 1.1fr); }
   .activity-card.is-fullscreen .message-detail { border-top: 1px solid var(--line); }
-  .table-head { min-width: 570px; }
+  .table-head { min-width: 820px; }
   .detail-heading { flex-wrap: wrap; padding: 8px 10px; }
   .decode-selects { width: 100%; }
   .decode-selects select { max-width: none; flex: 1; }

@@ -45,18 +45,18 @@ const retryableCount = computed(() => props.devices.filter((device) => ['error',
 
       <div class="connection-settings-grid">
         <div class="field-block profile-name-field">
-          <label class="field-label" for="profile-name">配置名称</label>
-          <input id="profile-name" v-model="profile.name" class="text-input" placeholder="例如：本地开发环境" />
+          <label class="field-label" for="profile-name">配置名称<span class="required-mark" aria-hidden="true">*</span></label>
+          <input id="profile-name" v-model="profile.name" class="text-input" placeholder="例如：本地开发环境" required />
         </div>
 
         <div class="field-row broker-endpoint-row">
           <div class="field-block grow">
-            <label class="field-label" for="broker-host">Broker 地址</label>
-            <input id="broker-host" v-model="profile.host" class="text-input mono" placeholder="localhost" autocomplete="off" />
+            <label class="field-label" for="broker-host">Broker 地址<span class="required-mark" aria-hidden="true">*</span></label>
+            <input id="broker-host" v-model="profile.host" class="text-input mono" placeholder="localhost" autocomplete="off" required />
           </div>
           <div class="field-block port-field">
-            <label class="field-label" for="broker-port">端口</label>
-            <input id="broker-port" v-model.number="profile.port" class="text-input mono" type="number" min="1" max="65535" />
+            <label class="field-label" for="broker-port">端口<span class="required-mark" aria-hidden="true">*</span></label>
+            <input id="broker-port" v-model.number="profile.port" class="text-input mono" type="number" min="1" max="65535" required />
           </div>
         </div>
 
@@ -175,14 +175,14 @@ const retryableCount = computed(() => props.devices.filter((device) => ['error',
 .icon-button.subtle:hover { color: var(--accent); border-color: var(--line-strong); background: var(--surface-raised); }
 .connection-settings-grid { display: grid; grid-template-columns: minmax(130px, .9fr) minmax(220px, 1.5fr) minmax(140px, .9fr) minmax(220px, 1.45fr); align-items: end; gap: 9px; padding: 11px 13px 9px; }
 .connection-settings-grid .field-block { min-width: 0; margin: 0; }
-.field-label { display: block; margin-bottom: 5px; color: var(--muted); font-size: 11px; font-weight: 600; }
+.field-label { display: block; margin-bottom: 7px; color: var(--muted); font-size: 11px; font-weight: 600; }
 .field-label-row { display: flex; align-items: center; justify-content: space-between; }
 .optional-label { margin-left: 4px; color: var(--subtle); font-size: 10px; font-weight: 450; }
 .memory-label { margin-left: 4px; color: var(--accent); font-size: 10px; font-weight: 600; }
 .text-input { width: 100%; height: 34px; border: 1px solid var(--line-strong); border-radius: 6px; padding: 0 9px; color: var(--ink); background: var(--surface-input); outline: none; font-size: 12px; }
 .text-input:hover { border-color: var(--subtle); }
 .text-input:focus { border-color: var(--focus-ring); box-shadow: 0 0 0 2px color-mix(in srgb, var(--focus-ring) 22%, transparent); }
-.text-input::placeholder { color: var(--subtle); }
+.text-input::placeholder { color: var(--placeholder); opacity: 1; }
 .mono { font-family: var(--font-mono); font-size: 11px; }
 .field-row { min-width: 0; display: flex; gap: 8px; }
 .grow { flex: 1; min-width: 0; }

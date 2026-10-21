@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-import { IconDeviceDesktopAnalytics, IconDeviceFloppy, IconLayoutDashboard, IconServer, IconSettings } from '@tabler/icons-vue'
+import { IconDeviceDesktopAnalytics, IconDeviceFloppy, IconLayoutDashboard, IconPlus, IconServer, IconSettings } from '@tabler/icons-vue'
 import ActivityPanel from './components/ActivityPanel.vue'
 import BrokerPanel from './components/BrokerPanel.vue'
 import PayloadEditor from './components/PayloadEditor.vue'
@@ -19,6 +19,7 @@ const publishControlsCollapsed = ref(false)
 const activePage = ref<'workspace' | 'settings'>('workspace')
 const connectionDialogOpen = ref(false)
 const planDialogOpen = ref(false)
+const planDialogInitialMode = ref<'list' | 'create'>('list')
 const connectionDialogElement = ref<HTMLElement | null>(null)
 const selectedPlan = computed(() => simulator.simulationPlans.find((plan) => plan.scenario.id === simulator.selectedScenarioId))
 let unlistenMcpTools: UnlistenFn | undefined
@@ -128,6 +129,11 @@ onUnmounted(() => {
 function closeConnectionDialog() {
   connectionDialogOpen.value = false
 }
+
+function openPlanDialog(initialMode: 'list' | 'create') {
+  planDialogInitialMode.value = initialMode
+  planDialogOpen.value = true
+}
 </script>
 
 <template>
@@ -175,7 +181,8 @@ function closeConnectionDialog() {
       </div>
 
       <div v-if="activePage === 'workspace'" class="topbar-actions">
-        <button class="new-workspace-button" type="button" @click="planDialogOpen = true"><IconSettings aria-hidden="true" :size="16" /><span>方案管理</span></button>
+        <button class="new-workspace-button" type="button" @click="openPlanDialog('create')"><IconPlus aria-hidden="true" :size="16" /><span>新建</span></button>
+        <button class="new-workspace-button" type="button" @click="openPlanDialog('list')"><IconSettings aria-hidden="true" :size="16" /><span>方案管理</span></button>
         <button class="save-workspace-button" type="button" @click="simulator.saveCurrent">
           <IconDeviceFloppy aria-hidden="true" :size="16" /><span>保存</span>
         </button>
@@ -273,8 +280,10 @@ function closeConnectionDialog() {
 
       <SimulationPlanDialog
         v-if="planDialogOpen"
+        :initial-mode="planDialogInitialMode"
         :plans="simulator.simulationPlans"
         :selected-scenario-id="simulator.selectedScenarioId"
+        :active-password="simulator.password"
         :select-plan="simulator.selectPlan"
         :save-plan="simulator.savePlan"
         :delete-plan="simulator.deletePlan"
