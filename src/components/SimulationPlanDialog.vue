@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { IconChevronRight, IconDeviceFloppy, IconPlus, IconSchema, IconServer, IconSettings, IconX } from '@tabler/icons-vue'
-import type { BrokerProfile, MqttVersion, PayloadFormat, SimulationPlan } from '../types'
+import type { MqttVersion, PayloadFormat, SimulationPlan } from '../types'
 
 const props = defineProps<{
   plans: SimulationPlan[]
@@ -12,6 +12,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{ close: [] }>()
+const dialogElement = ref<HTMLElement | null>(null)
 
 const mode = ref<'list' | 'create' | 'edit'>('list')
 const focusedScenarioId = ref(props.selectedScenarioId)
@@ -145,6 +146,10 @@ async function confirmDelete() {
   }
 }
 
+function closeDialog() {
+  if (!busy.value) emit('close')
+}
+
 function closeOrBack() {
   if (busy.value) return
   if (mode.value !== 'list') {
@@ -155,7 +160,7 @@ function closeOrBack() {
     pendingDeleteId.value = ''
     return
   }
-  emit('close')
+  closeDialog()
 }
 
 function handleKeydown(event: KeyboardEvent) {
@@ -165,13 +170,16 @@ function handleKeydown(event: KeyboardEvent) {
   }
 }
 
-onMounted(() => window.addEventListener('keydown', handleKeydown))
+onMounted(() => {
+  window.addEventListener('keydown', handleKeydown)
+  dialogElement.value?.focus()
+})
 onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
 </script>
 
 <template>
-  <div class="dialog-backdrop plan-dialog-backdrop" role="presentation" @click.self="emit('close')">
-    <section class="dialog-surface plan-dialog" :class="{ 'is-editing': mode !== 'list' }" role="dialog" aria-modal="true" :aria-labelledby="'plan-dialog-title'" tabindex="-1">
+  <div class="dialog-backdrop plan-dialog-backdrop" role="presentation" @click.self="closeDialog">
+    <section ref="dialogElement" class="dialog-surface plan-dialog" :class="{ 'is-editing': mode !== 'list' }" role="dialog" aria-modal="true" aria-labelledby="plan-dialog-title" tabindex="-1">
       <header class="plan-dialog-header">
         <div class="plan-dialog-heading">
           <span class="plan-brand-mark"><IconSchema aria-hidden="true" :size="19" :stroke-width="1.8" /></span>
@@ -185,7 +193,7 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
           <span v-if="mode === 'list'" class="plan-count"><strong>{{ plans.length }}</strong> 个方案</span>
           <button v-if="mode === 'list'" class="plan-create-button" type="button" @click="newPlan"><IconPlus aria-hidden="true" :size="16" />新建方案</button>
           <button v-else class="plan-back-button" type="button" @click="cancelEdit">返回列表</button>
-          <button class="dialog-close-button" type="button" aria-label="关闭仿真方案" @click="emit('close')"><IconX aria-hidden="true" :size="18" /></button>
+          <button class="dialog-close-button" type="button" aria-label="关闭仿真方案" :disabled="busy" @click="closeDialog"><IconX aria-hidden="true" :size="18" /></button>
         </div>
       </header>
 
