@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
-import { IconBraces, IconBulb, IconDeviceFloppy, IconFileCode, IconPlus, IconSchema, IconSparkles } from '@tabler/icons-vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { IconBraces, IconBulb, IconDeviceFloppy, IconFileCode, IconMaximize, IconMinimize, IconPlus, IconSchema, IconSparkles } from '@tabler/icons-vue'
 import type { FieldRange, ProtoSchemaEntry, PayloadFormat } from '../types'
 import {
   getMessageFields,
@@ -25,6 +25,7 @@ const randomIntToken = '{{randomInt:min:max}}'
 const randomFloatToken = '{{randomFloat:min:max}}'
 const formattingError = ref('')
 const fillMessage = ref('')
+const isFullscreen = ref(false)
 
 const selectedSchema = computed(() => schemas.value.find((schema) => schema.id === selectedSchemaId.value))
 const topicPreview = computed(() => topicTemplate.value.replaceAll('{{deviceId}}', 'sensor-001'))
@@ -150,16 +151,39 @@ function fillEmptyFields() {
     fillMessage.value = error instanceof Error ? error.message : '自动填充失败。'
   }
 }
+
+function toggleFullscreen() {
+  isFullscreen.value = !isFullscreen.value
+  document.body.classList.toggle('payload-fullscreen-open', isFullscreen.value)
+}
+
+function handleFullscreenKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && isFullscreen.value) toggleFullscreen()
+}
+
+onMounted(() => window.addEventListener('keydown', handleFullscreenKeydown))
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleFullscreenKeydown)
+  document.body.classList.remove('payload-fullscreen-open')
+})
 </script>
 
 <template>
-  <section class="panel-card payload-card">
+  <Teleport to="body" :disabled="!isFullscreen">
+  <section class="panel-card payload-card" :class="{ 'is-fullscreen': isFullscreen }">
     <div class="payload-heading">
       <div>
         <p class="eyebrow">设备上报数据</p>
         <h2>消息载荷</h2>
       </div>
-      <span class="live-pill"><i /> 已就绪</span>
+      <div class="payload-heading-actions">
+        <span class="live-pill"><i /> 已就绪</span>
+        <button class="tool-button fullscreen-button" type="button" :aria-label="isFullscreen ? '退出全屏编辑' : '全屏编辑载荷'" :title="isFullscreen ? '退出全屏编辑' : '全屏编辑载荷'" @click="toggleFullscreen">
+          <IconMinimize v-if="isFullscreen" aria-hidden="true" :size="16" />
+          <IconMaximize v-else aria-hidden="true" :size="16" />
+          <span>{{ isFullscreen ? '退出全屏' : '全屏编辑' }}</span>
+        </button>
+      </div>
     </div>
 
     <div class="topic-row">
@@ -304,11 +328,16 @@ function fillEmptyFields() {
       <span class="help-copy">数值范围：<code>{{ randomIntToken }}</code> 或 <code>{{ randomFloatToken }}</code></span>
     </div>
   </section>
+  </Teleport>
 </template>
 
 <style scoped>
 .payload-card { min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; padding: 13px; }
+.payload-card.is-fullscreen { position: fixed; inset: 14px; z-index: 120; width: auto; height: auto; max-height: none; min-height: 0; overflow-x: hidden; overflow-y: auto; padding: 16px; box-shadow: 0 24px 90px #0008; }
 .payload-heading { min-height: 38px; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.payload-heading-actions { min-width: 0; display: flex; align-items: center; gap: 8px; }
+.fullscreen-button { min-height: 32px; }
+.fullscreen-button span { white-space: nowrap; }
 .payload-heading h2 { margin: 2px 0 0; color: var(--ink); font-size: 15px; font-weight: 700; }
 .eyebrow { margin: 0; color: var(--subtle); font-size: 10px; font-weight: 600; letter-spacing: .04em; }
 .live-pill { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #5ad5a033; border-radius: 5px; padding: 5px 7px; color: var(--green); background: var(--green-soft); font-size: 10px; font-weight: 600; white-space: nowrap; }
@@ -338,6 +367,7 @@ function fillEmptyFields() {
 .import-button { position: relative; overflow: hidden; }
 .import-button input { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: pointer; }
 .json-editor-shell { flex: 1; min-height: 220px; display: grid; grid-template-columns: 38px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) 26px; margin-top: 9px; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; background: var(--code-surface); }
+.payload-card.is-fullscreen .json-editor-shell { min-height: 0; }
 .line-numbers { padding: 12px 9px 8px 0; border-right: 1px solid var(--line); color: var(--subtle); text-align: right; font: 10px/22px var(--font-mono); user-select: none; }
 .code-editor { display: block; min-width: 0; width: 100%; resize: none; border: 0; outline: none; padding: 12px; color: var(--ink-soft); background: transparent; font: 11px/1.65 var(--font-mono); tab-size: 2; }
 .code-editor:focus { box-shadow: inset 0 0 0 1px var(--focus-ring); }
@@ -346,6 +376,7 @@ function fillEmptyFields() {
 .editor-status-good { margin-left: auto; color: var(--green); }
 .formatting-error { margin: 6px 0 0; color: var(--danger); font-size: 10px; }
 .proto-workspace { flex: 1; min-height: 280px; display: grid; grid-template-columns: minmax(0, .92fr) minmax(0, 1.08fr); gap: 9px; margin-top: 9px; }
+.payload-card.is-fullscreen .proto-workspace { min-height: 0; }
 .schema-source-pane, .field-form-pane { min-width: 0; min-height: 0; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 7px; overflow: hidden; background: var(--surface-muted); }
 .schema-source-pane { padding: 9px; }
 .schema-heading-row { min-height: 32px; display: flex; align-items: center; gap: 7px; }
@@ -413,5 +444,7 @@ function fillEmptyFields() {
   .field-form-tools { width: 100%; }
   .field-form-tools .message-type-select { max-width: none; flex: 1; }
   .field-form-footnote { flex-wrap: wrap; }
+  .payload-card.is-fullscreen { inset: 6px; padding: 10px; }
+  .payload-card.is-fullscreen .proto-workspace { min-height: 0; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(190px, .8fr) minmax(250px, 1.2fr); }
 }
 </style>

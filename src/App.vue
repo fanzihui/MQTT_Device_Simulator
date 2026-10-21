@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, reactive, ref } from 'vue'
+import { nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-import { IconDeviceDesktopAnalytics, IconDeviceFloppy, IconPlus, IconSettings, IconLayoutDashboard } from '@tabler/icons-vue'
+import { IconChevronDown, IconChevronRight, IconDeviceDesktopAnalytics, IconDeviceFloppy, IconPlus, IconSchema, IconServer, IconSettings, IconLayoutDashboard, IconX } from '@tabler/icons-vue'
 import ActivityPanel from './components/ActivityPanel.vue'
 import BrokerPanel from './components/BrokerPanel.vue'
 import PayloadEditor from './components/PayloadEditor.vue'
@@ -14,10 +14,29 @@ import type { McpToolRequest } from './types'
 
 const simulator = reactive(useSimulator())
 useThemePreference()
-const brokerSettingsCollapsed = ref(false)
 const publishControlsCollapsed = ref(false)
 const activePage = ref<'workspace' | 'settings'>('workspace')
+const connectionDialogOpen = ref(false)
+const createDialogOpen = ref(false)
+const connectionDialogElement = ref<HTMLElement | null>(null)
+const createDialogElement = ref<HTMLElement | null>(null)
 let unlistenMcpTools: UnlistenFn | undefined
+
+watch([connectionDialogOpen, createDialogOpen], ([connectionOpen, createOpen]) => {
+  document.body.classList.toggle('modal-open', connectionOpen || createOpen)
+})
+
+watch(connectionDialogOpen, async (open) => {
+  if (!open) return
+  await nextTick()
+  connectionDialogElement.value?.focus()
+})
+
+watch(createDialogOpen, async (open) => {
+  if (!open) return
+  await nextTick()
+  createDialogElement.value?.focus()
+})
 
 onMounted(async () => {
   if (!simulator.isDesktopApp()) return
@@ -106,10 +125,28 @@ onMounted(async () => {
   })
 })
 
-onUnmounted(() => unlistenMcpTools?.())
+onUnmounted(() => {
+  unlistenMcpTools?.()
+  document.body.classList.remove('modal-open')
+})
 
 function changeProfile(event: Event) {
   simulator.selectProfile((event.target as HTMLSelectElement).value)
+}
+
+function closeConnectionDialog() {
+  connectionDialogOpen.value = false
+}
+
+async function createProfileFromDialog() {
+  await simulator.createProfile()
+  createDialogOpen.value = false
+  connectionDialogOpen.value = true
+}
+
+function createScenarioFromDialog() {
+  simulator.createScenario()
+  createDialogOpen.value = false
 }
 </script>
 
@@ -154,14 +191,18 @@ function changeProfile(event: Event) {
         </label>
       </div>
 
+      <button v-if="activePage === 'workspace'" class="connection-settings-trigger" type="button" @click="connectionDialogOpen = true">
+        <span class="connection-trigger-icon"><IconServer aria-hidden="true" :size="16" /></span>
+        <span class="connection-trigger-copy"><strong>连接设置</strong><small>{{ simulator.profile.host }}:{{ simulator.profile.port }}</small></span>
+      </button>
+
       <div class="header-status" :class="{ connected: simulator.onlineDevices.length > 0 }" role="status" aria-live="polite">
         <i />
         <span>{{ simulator.onlineDevices.length > 0 ? `${simulator.onlineDevices.length} 台在线` : '未连接' }}</span>
       </div>
 
       <div v-if="activePage === 'workspace'" class="topbar-actions">
-        <button class="topbar-icon-button" type="button" title="新建连接配置" aria-label="新建连接配置" @click="simulator.createProfile"><IconPlus aria-hidden="true" :size="17" /></button>
-        <button class="topbar-icon-button" type="button" title="新建模拟场景" aria-label="新建模拟场景" @click="simulator.createScenario"><IconPlus aria-hidden="true" :size="17" /></button>
+        <button class="new-workspace-button" type="button" @click="createDialogOpen = true"><IconPlus aria-hidden="true" :size="16" /><span>新建</span><IconChevronDown aria-hidden="true" :size="14" /></button>
         <button class="save-workspace-button" type="button" @click="simulator.saveCurrent">
           <IconDeviceFloppy aria-hidden="true" :size="16" /><span>保存</span>
         </button>
@@ -169,25 +210,7 @@ function changeProfile(event: Event) {
     </header>
 
     <main v-if="activePage === 'workspace'" class="workspace-main">
-      <div class="workbench-grid" :class="{ 'broker-collapsed': brokerSettingsCollapsed, 'publish-collapsed': publishControlsCollapsed }">
-        <BrokerPanel
-          v-model:collapsed="brokerSettingsCollapsed"
-          v-model="simulator.profile"
-          v-model:mqtt-version="simulator.mqttVersion"
-          v-model:password="simulator.password"
-          v-model:batch="simulator.deviceBatch"
-          :devices="simulator.devices"
-          :connecting="simulator.connecting"
-          :running="simulator.running"
-          :protocol-locked="simulator.running || simulator.connecting || simulator.monitorRunning"
-          :desktop-ready="simulator.isDesktopApp()"
-          @connect="simulator.connect"
-          @stop="simulator.stop"
-          @retry="simulator.retryDevice"
-          @retry-failed="simulator.retryFailedDevices"
-          @save="simulator.saveCurrent"
-        />
-
+      <div class="workbench-grid" :class="{ 'publish-collapsed': publishControlsCollapsed }">
         <PayloadEditor
           v-model:format="simulator.payloadFormat"
           v-model:topic-template="simulator.topicTemplate"
@@ -251,5 +274,50 @@ function changeProfile(event: Event) {
         <span>消息记录 {{ simulator.published.length + simulator.received.length }}/200</span>
       </div>
     </footer>
+
+    <Teleport to="body">
+      <div v-if="connectionDialogOpen" class="dialog-backdrop" role="presentation" @click.self="closeConnectionDialog" @keydown.esc.prevent.stop="closeConnectionDialog">
+        <section ref="connectionDialogElement" class="dialog-surface connection-dialog" role="dialog" aria-modal="true" aria-label="连接设置" tabindex="-1">
+          <BrokerPanel
+            v-model="simulator.profile"
+            v-model:mqtt-version="simulator.mqttVersion"
+            v-model:password="simulator.password"
+            v-model:batch="simulator.deviceBatch"
+            :devices="simulator.devices"
+            :connecting="simulator.connecting"
+            :running="simulator.running"
+            :protocol-locked="simulator.running || simulator.connecting || simulator.monitorRunning"
+            :desktop-ready="simulator.isDesktopApp()"
+            @connect="simulator.connect"
+            @stop="simulator.stop"
+            @retry="simulator.retryDevice"
+            @retry-failed="simulator.retryFailedDevices"
+            @save="simulator.saveCurrent"
+            @close="closeConnectionDialog"
+          />
+        </section>
+      </div>
+
+      <div v-if="createDialogOpen" class="dialog-backdrop" role="presentation" @click.self="createDialogOpen = false" @keydown.esc.prevent.stop="createDialogOpen = false">
+        <section ref="createDialogElement" class="dialog-surface create-dialog" role="dialog" aria-modal="true" aria-labelledby="create-dialog-title" tabindex="-1">
+          <header class="dialog-heading">
+            <div><p class="eyebrow">工作区</p><h2 id="create-dialog-title">新建</h2><p>选择要创建的配置类型。</p></div>
+            <button class="dialog-close-button" type="button" aria-label="关闭新建弹窗" @click="createDialogOpen = false"><IconX aria-hidden="true" :size="18" /></button>
+          </header>
+          <div class="creation-options">
+            <button class="creation-option" type="button" @click="createProfileFromDialog">
+              <span class="creation-option-icon"><IconServer aria-hidden="true" :size="19" /></span>
+              <span class="creation-option-copy"><strong>连接配置</strong><small>为新的 MQTT Broker 创建连接，并打开设置表单。</small></span>
+              <IconChevronRight class="creation-option-arrow" aria-hidden="true" :size="18" />
+            </button>
+            <button class="creation-option" type="button" @click="createScenarioFromDialog">
+              <span class="creation-option-icon"><IconSchema aria-hidden="true" :size="19" /></span>
+              <span class="creation-option-copy"><strong>模拟场景</strong><small>创建当前连接下的新场景，随后可编辑载荷和发送选项。</small></span>
+              <IconChevronRight class="creation-option-arrow" aria-hidden="true" :size="18" />
+            </button>
+          </div>
+        </section>
+      </div>
+    </Teleport>
   </div>
 </template>

@@ -163,10 +163,11 @@ function selectMessage(entry: MessageEntry) {
 .activity-tabs button span { min-width: 19px; padding: 3px 5px; border-radius: 4px; color: var(--muted); background: var(--surface-raised); font: 10px var(--font-mono); text-align: center; }
 .activity-tabs button.active span { color: var(--accent); background: var(--accent-soft); }
 .activity-cap { color: var(--subtle); font-size: 10px; white-space: nowrap; }
-.activity-content { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.18fr) minmax(260px, .82fr); }
-.message-list { min-width: 0; overflow: auto; }
+.activity-content { flex: 1; min-width: 0; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.18fr) minmax(260px, .82fr); }
+.activity-content > * { min-width: 0; }
+.message-list { min-width: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
 .table-head, .message-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(75px, .85fr) 34px minmax(100px, .9fr) 68px; align-items: center; gap: 9px; }
-.table-head { position: sticky; top: 0; z-index: 1; height: 34px; padding: 0 13px; color: var(--muted); background: var(--surface-muted); border-bottom: 1px solid var(--line); font-size: 10px; font-weight: 600; }
+.table-head { position: sticky; top: 0; z-index: 1; min-width: 570px; height: 34px; padding: 0 13px; color: var(--muted); background: var(--surface-muted); border-bottom: 1px solid var(--line); font-size: 10px; font-weight: 600; }
 .message-row { width: 100%; min-width: 570px; min-height: 38px; padding: 0 13px; border: 0; border-bottom: 1px solid var(--line); color: var(--ink-soft); background: var(--surface); text-align: left; cursor: pointer; transition: background .12s ease; }
 .message-row:hover { background: var(--surface-raised); }
 .message-row.selected { background: var(--accent-soft); }
@@ -187,6 +188,7 @@ function selectMessage(entry: MessageEntry) {
 .empty-activity small { max-width: 360px; color: var(--muted); font-size: 11px; line-height: 1.5; }
 .message-detail { min-width: 0; display: flex; flex-direction: column; border-left: 1px solid var(--line); background: var(--surface-muted); }
 .detail-heading { min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 12px; border-bottom: 1px solid var(--line); }
+.detail-heading > * { min-width: 0; }
 .detail-heading strong { display: block; color: var(--ink-soft); font-size: 11px; font-weight: 650; }
 .decode-selects { display: flex; gap: 5px; min-width: 0; }
 .decode-selects select { max-width: 130px; height: 28px; min-width: 0; border: 1px solid var(--line-strong); border-radius: 5px; padding: 0 6px; color: var(--ink-soft); background: var(--surface-input); font-size: 10px; }
@@ -214,6 +216,7 @@ function selectMessage(entry: MessageEntry) {
 .log-message { overflow: hidden; color: var(--ink-soft); text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
 .compact { min-height: 110px; }
 @media (max-width: 1120px) {
+  .activity-card { min-height: 372px; }
   .activity-content { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(150px, auto) minmax(160px, 230px); }
   .message-detail { border-left: 0; border-top: 1px solid var(--line); }
 }

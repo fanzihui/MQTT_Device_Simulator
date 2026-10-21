@@ -1,13 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { IconArrowUpRight, IconChevronDown, IconChevronUp, IconDeviceFloppy, IconRefresh, IconServer } from '@tabler/icons-vue'
+import { IconArrowUpRight, IconDeviceFloppy, IconRefresh, IconServer, IconX } from '@tabler/icons-vue'
 import type { BrokerProfile, DeviceBatch, DeviceStatus, MqttVersion } from '../types'
 
 const profile = defineModel<BrokerProfile>({ required: true })
 const mqttVersion = defineModel<MqttVersion>('mqttVersion', { required: true })
 const password = defineModel<string>('password', { required: true })
 const batch = defineModel<DeviceBatch>('batch', { required: true })
-const collapsed = defineModel<boolean>('collapsed', { required: true })
 
 const props = defineProps<{
   devices: DeviceStatus[]
@@ -23,6 +22,7 @@ const emit = defineEmits<{
   retry: [deviceId: string]
   retryFailed: []
   save: []
+  close: []
 }>()
 
 const onlineCount = computed(() => props.devices.filter((device) => device.status === 'connected').length)
@@ -30,21 +30,8 @@ const retryableCount = computed(() => props.devices.filter((device) => ['error',
 </script>
 
 <template>
-  <aside class="broker-column" :class="{ 'is-collapsed': collapsed }">
-    <section v-if="collapsed" class="panel-card panel-rail broker-rail">
-      <button class="panel-rail-toggle" type="button" aria-label="展开连接设置" title="展开连接设置" :aria-expanded="false" @click="collapsed = false">
-        <span class="panel-rail-icon broker-icon"><IconServer aria-hidden="true" :size="18" :stroke-width="1.8" /></span>
-        <span class="panel-rail-title">连接设置</span>
-        <span class="panel-rail-endpoint mono">{{ profile.host }}:{{ profile.port }} · MQTT {{ mqttVersion }}</span>
-        <IconChevronDown class="panel-rail-chevron" aria-hidden="true" :size="16" />
-      </button>
-      <span class="panel-rail-status" role="status" :aria-label="`${onlineCount} / ${batch.count} 台设备在线`" :title="`${onlineCount} / ${batch.count} 台设备在线`">
-        <i class="panel-rail-dot" :class="onlineCount > 0 ? 'is-green' : connecting ? 'is-amber' : 'is-muted'" />
-        <span>{{ onlineCount }}/{{ batch.count }}</span>
-      </span>
-    </section>
-
-    <section v-else class="panel-card broker-card">
+  <aside class="broker-column">
+    <section class="panel-card broker-card">
       <div class="card-heading">
         <div class="heading-icon broker-icon"><IconServer aria-hidden="true" :size="19" :stroke-width="1.8" /></div>
         <div>
@@ -52,7 +39,7 @@ const retryableCount = computed(() => props.devices.filter((device) => ['error',
         </div>
         <div class="heading-actions">
           <button class="icon-button subtle" type="button" aria-label="保存连接配置" title="保存连接配置" @click="emit('save')"><IconDeviceFloppy aria-hidden="true" :size="18" :stroke-width="1.8" /></button>
-          <button class="icon-button subtle panel-collapse-button" type="button" aria-label="收起连接设置" title="收起连接设置" :aria-expanded="true" @click="collapsed = true"><IconChevronUp aria-hidden="true" :size="18" /></button>
+          <button class="icon-button subtle" type="button" aria-label="关闭连接设置" title="关闭连接设置" @click="emit('close')"><IconX aria-hidden="true" :size="18" /></button>
         </div>
       </div>
 
@@ -176,9 +163,9 @@ const retryableCount = computed(() => props.devices.filter((device) => ['error',
 </template>
 
 <style scoped>
-.broker-column { min-width: 0; }
-.broker-card { display: flex; flex-direction: column; overflow: hidden; padding: 0; }
-.card-heading { min-height: 46px; display: flex; align-items: center; gap: 9px; padding: 0 13px; border-bottom: 1px solid var(--line); }
+.broker-column { width: 100%; min-width: 0; }
+.broker-card { max-height: min(860px, calc(100dvh - 40px)); display: flex; flex-direction: column; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; padding: 0; }
+.card-heading { min-height: 46px; position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 9px; padding: 0 13px; border-bottom: 1px solid var(--line); background: var(--surface); }
 .heading-actions { display: flex; align-items: center; gap: 3px; margin-left: auto; }
 .heading-actions .icon-button { margin-left: 0; }
 .card-heading h2 { margin: 0; color: var(--ink); font-size: 13px; font-weight: 700; }
@@ -254,8 +241,6 @@ const retryableCount = computed(() => props.devices.filter((device) => ['error',
 .button-quiet { color: var(--muted); border-color: var(--line-strong); background: var(--surface-raised); }
 .button-quiet:hover { color: var(--ink); background: var(--surface-muted); }
 .browser-note { margin: 0 13px 12px; color: var(--subtle); font-size: 10px; line-height: 1.45; }
-.broker-rail { min-height: 50px; }
-.broker-rail .panel-rail-status { padding-right: 3px; }
 
 @media (max-width: 1100px) {
   .connection-settings-grid { grid-template-columns: minmax(130px, 1fr) minmax(220px, 1.6fr) minmax(145px, 1fr); }
@@ -269,6 +254,5 @@ const retryableCount = computed(() => props.devices.filter((device) => ['error',
   .connection-extras { align-items: flex-start; }
   .device-batch-grid { grid-template-columns: minmax(0, 1fr); }
   .subsection-heading, .prefix-row, .device-preview-line, .device-list { grid-column: 1; }
-  .panel-rail-summary { display: none; }
 }
 </style>
