@@ -28,6 +28,7 @@
   --amber-soft: #3b2d1b;
   --danger: #ff8178;
   --danger-soft: #3e2525;
+  --empty-state-icon: #334155;
   --focus-ring: #22d3ee;
   --code-key: #79b8ff;
   --code-string: #85e89d;
@@ -62,6 +63,7 @@
   --amber-soft: #f8f0df;
   --danger: #a84641;
   --danger-soft: #f9ecea;
+  --empty-state-icon: #e2e8f0;
   --focus-ring: #06b6d4;
   --code-key: #005cc5;
   --code-string: #22863a;
@@ -112,7 +114,9 @@ input[type='number']::-webkit-inner-spin-button, input[type='number']::-webkit-o
 .topbar-spacer { flex: 1; min-width: 4px; }
 .topbar-selectors { min-width: 0; display: flex; align-items: center; gap: 8px; flex: 0 1 auto; }
 .profile-select-wrap { min-width: 0; display: grid; gap: 4px; color: var(--subtle); font-size: 10px; font-weight: 600; }
-.profile-select-wrap select { width: 148px; min-width: 0; height: 36px; border: 1px solid var(--line-strong); border-radius: 7px; padding: 0 9px; color: var(--ink-soft); background: var(--surface-input); font-size: 12px; text-overflow: ellipsis; }
+.profile-select-wrap select { width: 148px; min-width: 0; height: 36px; border: 1px solid transparent; border-radius: 8px; padding: 0 11px; color: var(--ink-soft); background: var(--surface-raised); font-size: 12px; text-overflow: ellipsis; transition: background .14s ease, box-shadow .14s ease; }
+.profile-select-wrap select:hover { background: color-mix(in srgb, var(--surface-raised) 72%, var(--line) 28%); }
+.profile-select-wrap select:focus-visible { outline: none; box-shadow: 0 0 0 2px color-mix(in srgb, var(--focus-ring) 38%, transparent); }
 .plan-select-wrap select { width: min(264px, 23vw); }
 .connection-settings-trigger { min-width: 0; width: 184px; height: 40px; display: inline-flex; flex: 0 1 184px; align-items: center; gap: 9px; border: 1px solid var(--line); border-radius: 8px; padding: 0 10px; color: var(--ink-soft); background: var(--surface-muted); text-align: left; cursor: pointer; transition: border-color .14s ease, background .14s ease; }
 .connection-settings-trigger:hover { border-color: var(--accent); background: var(--accent-soft); }
@@ -120,9 +124,9 @@ input[type='number']::-webkit-inner-spin-button, input[type='number']::-webkit-o
 .connection-trigger-copy { min-width: 0; display: grid; gap: 2px; overflow: hidden; }
 .connection-trigger-copy strong { overflow: hidden; color: var(--ink); font-size: 11px; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
 .connection-trigger-copy small { overflow: hidden; color: var(--muted); font: 9px var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
-.header-status { min-width: 94px; height: 34px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 10px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); background: var(--surface-muted); font-size: 11px; font-weight: 650; white-space: nowrap; }
-.header-status i { width: 7px; height: 7px; border-radius: 50%; background: var(--subtle); box-shadow: 0 0 0 3px color-mix(in srgb, var(--subtle) 14%, transparent); }
-.header-status.connected { color: var(--green); border-color: #5ad5a044; background: var(--green-soft); }
+.header-status { min-width: 94px; height: 34px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 11px; border: 1px solid color-mix(in srgb, var(--danger) 16%, transparent); border-radius: 999px; color: var(--danger); background: var(--danger-soft); font-size: 11px; font-weight: 650; white-space: nowrap; }
+.header-status i { width: 7px; height: 7px; border-radius: 50%; background: var(--danger); box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 14%, transparent), 0 0 8px color-mix(in srgb, var(--danger) 32%, transparent); }
+.header-status.connected { color: var(--green); border-color: color-mix(in srgb, var(--green) 18%, transparent); background: var(--green-soft); }
 .header-status.connected i { background: var(--green); box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 18%, transparent), 0 0 10px color-mix(in srgb, var(--green) 50%, transparent); }
 .topbar-actions { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
 .topbar-icon-button { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 7px; color: var(--muted); background: var(--surface); cursor: pointer; }

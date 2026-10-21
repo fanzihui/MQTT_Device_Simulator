@@ -107,7 +107,7 @@ onUnmounted(() => {
     <div v-if="tab !== 'logs'" class="activity-content">
       <div class="message-list">
         <div class="table-head">
-          <span>主题</span><span>设备</span><span>消息载荷</span><span>QoS</span><span>状态</span><span>时间</span>
+          <span>TOPIC</span><span>DEVICE</span><span>PAYLOAD</span><span>QOS</span><span>STATUS</span><span>TIME</span>
         </div>
         <button v-for="entry in visibleMessages.slice().reverse()" :key="entry.id" class="message-row" :class="{ selected: selectedMessageId === entry.id }" type="button" @click="selectMessage(entry)">
           <span class="message-topic mono"><IconArrowUpRight v-if="entry.direction === 'out'" aria-hidden="true" class="out-arrow" :size="15" /><IconArrowDownLeft v-else aria-hidden="true" class="in-arrow" :size="15" />{{ entry.topic }}</span>
@@ -118,7 +118,7 @@ onUnmounted(() => {
           <span class="message-time mono">{{ formatTime(entry.timestamp) }}</span>
         </button>
         <div v-if="!visibleMessages.length" class="empty-activity">
-          <IconActivity aria-hidden="true" class="empty-activity-icon" :size="48" :stroke-width="1.25" />
+          <IconActivity aria-hidden="true" class="empty-activity-icon" :size="60" :stroke-width="1.25" />
           <strong>{{ tab === 'published' ? '还没有发送消息' : '还没有收到消息' }}</strong>
           <small>{{ tab === 'published' ? '连接设备并开始发送后，消息会显示在这里。' : '启动订阅监听后，Broker 消息会显示在这里。' }}</small>
         </div>
@@ -182,9 +182,11 @@ onUnmounted(() => {
 .activity-icon { width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 7px; color: var(--accent); background: var(--accent-soft); }
 .activity-title h2 { margin: 0; color: var(--ink); font-size: 13px; font-weight: 700; }
 .activity-tabs { align-self: stretch; display: flex; align-items: stretch; gap: 14px; margin-left: auto; }
-.activity-tabs button { display: flex; align-items: center; gap: 6px; padding: 0 2px; border: 0; border-bottom: 2px solid transparent; color: var(--muted); background: transparent; font-size: 11px; font-weight: 500; cursor: pointer; transition: color .14s ease, border-color .14s ease; }
+.activity-tabs button { position: relative; display: flex; align-items: center; gap: 6px; padding: 0 2px; border: 0; color: var(--muted); background: transparent; font-size: 11px; font-weight: 500; cursor: pointer; transition: color .14s ease; }
+.activity-tabs button::after { position: absolute; right: 0; bottom: 0; left: 0; height: 2px; border-radius: 999px; background: transparent; content: ''; transform: scaleX(.55); transition: background .14s ease, transform .14s ease; }
 .activity-tabs button:hover { color: var(--ink); }
-.activity-tabs button.active { color: var(--ink); border-bottom-color: var(--accent); font-weight: 750; }
+.activity-tabs button.active { color: var(--accent); font-weight: 600; }
+.activity-tabs button.active::after { background: var(--accent); transform: scaleX(1); }
 .activity-tabs button span { min-width: 19px; padding: 3px 5px; border-radius: 4px; color: var(--muted); background: var(--surface-raised); font: 10px var(--font-mono); text-align: center; }
 .activity-tabs button.active span { color: var(--accent); background: var(--accent-soft); }
 .activity-cap { color: var(--subtle); font-size: 10px; white-space: nowrap; }
@@ -194,7 +196,7 @@ onUnmounted(() => {
 .activity-content > * { min-width: 0; }
 .message-list { min-width: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
 .table-head, .message-row { display: grid; grid-template-columns: minmax(150px, 1.2fr) minmax(90px, .72fr) minmax(170px, 1.35fr) 52px 124px 92px; align-items: center; gap: 12px; }
-.table-head { position: sticky; top: 0; z-index: 1; min-width: 820px; height: 38px; padding: 0 16px; color: var(--muted); background: color-mix(in srgb, var(--surface-muted) 68%, transparent); border-bottom: 1px solid var(--line); font-size: 10px; font-weight: 500; letter-spacing: .035em; text-transform: uppercase; }
+.table-head { position: sticky; top: 0; z-index: 1; min-width: 820px; height: 38px; padding: 0 16px; color: var(--subtle); background: color-mix(in srgb, var(--surface-muted) 50%, transparent); border-bottom: 1px solid var(--line); font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
 .message-row { width: 100%; min-width: 820px; min-height: 42px; padding: 0 16px; border: 0; border-bottom: 1px solid var(--line); color: var(--ink-soft); background: var(--surface); text-align: left; cursor: pointer; transition: background .12s ease; }
 .message-row:hover { background: var(--surface-raised); }
 .message-row.selected { background: var(--accent-soft); }
@@ -212,10 +214,9 @@ onUnmounted(() => {
 .message-row:has(.in-arrow) .message-status { color: var(--accent); }
 .message-row:has(.in-arrow) .message-status i { background: var(--accent); }
 .empty-activity { min-height: 180px; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 10px; color: var(--muted); text-align: center; padding: 24px 16px; }
-.empty-activity-icon { margin-bottom: 3px; color: #e2e8f0; }
-:root:not([data-theme='light']) .empty-activity-icon { color: #334155; }
-.empty-activity strong { color: var(--ink-soft); font-size: 12px; }
-.empty-activity small { max-width: 360px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.empty-activity-icon { margin-bottom: 3px; color: var(--empty-state-icon); }
+.empty-activity strong { color: var(--ink-soft); font-size: 12px; font-weight: 600; }
+.empty-activity small { max-width: 360px; color: var(--subtle); font-size: 11px; line-height: 1.55; }
 .message-detail { min-width: 0; display: flex; flex-direction: column; border-left: 1px solid var(--line); background: var(--surface-muted); }
 .detail-heading { min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 12px; border-bottom: 1px solid var(--line); }
 .detail-heading > * { min-width: 0; }

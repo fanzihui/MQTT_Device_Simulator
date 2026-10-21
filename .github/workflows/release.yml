@@ -27,14 +27,20 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      - name: setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.5
+          run_install: false
+
       - name: setup node
         uses: actions/setup-node@v5
         with:
           node-version: 24
-          cache: 'npm'
+          cache: 'pnpm'
 
       - name: install frontend dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
