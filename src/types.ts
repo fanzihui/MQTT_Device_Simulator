@@ -51,6 +51,12 @@ export interface Scenario {
   publishCountPerDevice?: number | null
 }
 
+/** A user-facing simulation plan pairs one broker connection with one scenario. */
+export interface SimulationPlan {
+  profile: BrokerProfile
+  scenario: Scenario
+}
+
 export interface FieldRange {
   enabled: boolean
   min: number

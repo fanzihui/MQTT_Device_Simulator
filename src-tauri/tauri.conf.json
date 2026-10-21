@@ -28,5 +28,14 @@
   "bundle": {
     "active": true,
     "targets": ["nsis"]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDgwQjc0RjQzNjA3NTA1OTcKUldTWEJYVmdRMCszZ0RnQ2RJb3d1K2NCMUFTeEQ2V3JjazI0OXBxYWo4Z29tMWNSMzVYdHJlOEcK",
+      "endpoints": [
+        "https://github.com/fanzihui/MQTT_Device_Simulator/releases/latest/download/latest.json"
+      ]
+    }
   }
+    
 }

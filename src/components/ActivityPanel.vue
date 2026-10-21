@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue'
-import { IconActivity, IconArrowDownLeft, IconArrowUpRight } from '@tabler/icons-vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { IconActivity, IconArrowDownLeft, IconArrowUpRight, IconMaximize, IconMinimize } from '@tabler/icons-vue'
 import type { MessageEntry, ProtoSchemaEntry, SystemLogEntry } from '../types'
 import { bytesFromHex, decodeProtoMessage, listProtoMessageTypes, parseProtoSchema } from '../lib/payload'
 
@@ -16,6 +16,7 @@ const props = defineProps<{
 }>()
 
 const selectedMessageId = defineModel<string>('selectedMessageId', { required: true })
+const isFullscreen = ref(false)
 const selectedMessage = computed(() => [...props.published, ...props.received].find((entry) => entry.id === selectedMessageId.value))
 const selectedFormatLabel = computed(() => {
   const message = selectedMessage.value
@@ -65,10 +66,26 @@ function formatTime(value: string) {
 function selectMessage(entry: MessageEntry) {
   selectedMessageId.value = entry.id
 }
+
+function toggleFullscreen() {
+  isFullscreen.value = !isFullscreen.value
+  document.body.classList.toggle('activity-fullscreen-open', isFullscreen.value)
+}
+
+function handleFullscreenKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && isFullscreen.value) toggleFullscreen()
+}
+
+onMounted(() => window.addEventListener('keydown', handleFullscreenKeydown))
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleFullscreenKeydown)
+  document.body.classList.remove('activity-fullscreen-open')
+})
 </script>
 
 <template>
-  <section class="panel-card activity-card">
+  <Teleport to="body" :disabled="!isFullscreen">
+  <section class="panel-card activity-card" :class="{ 'is-fullscreen': isFullscreen }">
     <div class="activity-topbar">
       <div class="activity-title">
         <div class="activity-icon"><IconActivity aria-hidden="true" :size="19" :stroke-width="1.8" /></div>
@@ -80,6 +97,11 @@ function selectMessage(entry: MessageEntry) {
         <button :class="{ active: tab === 'logs' }" type="button" @click="tab = 'logs'">系统日志 <span>{{ logs.length }}</span></button>
       </div>
       <div class="activity-cap">最多保留 200 条</div>
+      <button class="activity-fullscreen-button" type="button" :aria-label="isFullscreen ? '退出消息记录全屏' : '全屏查看消息记录'" :title="isFullscreen ? '退出全屏' : '全屏查看'" @click="toggleFullscreen">
+        <IconMinimize v-if="isFullscreen" aria-hidden="true" :size="16" />
+        <IconMaximize v-else aria-hidden="true" :size="16" />
+        <span>{{ isFullscreen ? '退出全屏' : '全屏' }}</span>
+      </button>
     </div>
 
     <div v-if="tab !== 'logs'" class="activity-content">
@@ -148,10 +170,12 @@ function selectMessage(entry: MessageEntry) {
       <div v-if="!logs.length" class="empty-activity compact"><strong>暂无系统日志</strong><small>连接状态和发送结果会显示在这里。</small></div>
     </div>
   </section>
+  </Teleport>
 </template>
 
 <style scoped>
 .activity-card { min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.activity-card.is-fullscreen { position: fixed; inset: 14px; z-index: 120; width: auto; height: auto; min-height: 0; max-height: none; overflow: hidden; border-color: var(--line-strong); border-radius: 12px; box-shadow: 0 24px 90px #0008; }
 .activity-topbar { min-height: 58px; display: flex; align-items: center; gap: 18px; padding: 0 14px; border-bottom: 1px solid var(--line); }
 .activity-title { display: flex; align-items: center; gap: 9px; flex: 0 0 auto; }
 .activity-icon { width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 7px; color: var(--accent); background: var(--accent-soft); }
@@ -163,6 +187,8 @@ function selectMessage(entry: MessageEntry) {
 .activity-tabs button span { min-width: 19px; padding: 3px 5px; border-radius: 4px; color: var(--muted); background: var(--surface-raised); font: 10px var(--font-mono); text-align: center; }
 .activity-tabs button.active span { color: var(--accent); background: var(--accent-soft); }
 .activity-cap { color: var(--subtle); font-size: 10px; white-space: nowrap; }
+.activity-fullscreen-button { min-height: 31px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; margin-left: 2px; border: 1px solid var(--line-strong); border-radius: 6px; padding: 0 8px; color: var(--ink-soft); background: var(--surface-raised); font-size: 10px; font-weight: 650; white-space: nowrap; cursor: pointer; }
+.activity-fullscreen-button:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
 .activity-content { flex: 1; min-width: 0; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.18fr) minmax(260px, .82fr); }
 .activity-content > * { min-width: 0; }
 .message-list { min-width: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
@@ -215,16 +241,30 @@ function selectMessage(entry: MessageEntry) {
 .level-error { color: var(--danger); background: var(--danger-soft); }
 .log-message { overflow: hidden; color: var(--ink-soft); text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
 .compact { min-height: 110px; }
+.activity-card.is-fullscreen .activity-topbar { min-height: 66px; padding-inline: 20px; }
+.activity-card.is-fullscreen .activity-title h2 { font-size: 15px; }
+.activity-card.is-fullscreen .activity-content { grid-template-columns: minmax(0, 1.2fr) minmax(340px, .8fr); }
+.activity-card.is-fullscreen .message-detail { min-height: 0; }
+.activity-card.is-fullscreen .detail-body { flex: 1; display: flex; flex-direction: column; gap: 4px; padding: 16px; }
+.activity-card.is-fullscreen .payload-pre { max-height: none; min-height: 150px; flex: 1; font-size: 12px; }
+.activity-card.is-fullscreen .message-row { min-height: 46px; }
+.activity-card.is-fullscreen .log-row { min-height: 42px; }
 @media (max-width: 1120px) {
   .activity-card { min-height: 372px; }
   .activity-content { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(150px, auto) minmax(160px, 230px); }
   .message-detail { border-left: 0; border-top: 1px solid var(--line); }
+  .activity-card.is-fullscreen .activity-content { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(240px, .8fr); }
 }
 @media (max-width: 680px) {
   .activity-topbar { flex-wrap: wrap; gap: 0 10px; padding: 8px 10px 0; }
   .activity-title { min-height: 38px; }
   .activity-tabs { width: 100%; height: 38px; justify-content: space-between; gap: 8px; margin: 0; }
   .activity-cap { display: none; }
+  .activity-fullscreen-button { margin-left: auto; }
+  .activity-card.is-fullscreen { inset: 6px; }
+  .activity-card.is-fullscreen .activity-topbar { gap: 0 10px; padding: 8px 10px 0; }
+  .activity-card.is-fullscreen .activity-content { grid-template-rows: minmax(200px, .9fr) minmax(220px, 1.1fr); }
+  .activity-card.is-fullscreen .message-detail { border-top: 1px solid var(--line); }
   .table-head { min-width: 570px; }
   .detail-heading { flex-wrap: wrap; padding: 8px 10px; }
   .decode-selects { width: 100%; }

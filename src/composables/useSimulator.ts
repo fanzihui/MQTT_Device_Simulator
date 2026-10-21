@@ -12,6 +12,7 @@ import type {
   PublishOptions,
   PublishRequest,
   Scenario,
+  SimulationPlan,
   SystemLogEntry,
   WorkspaceData,
 } from '../types'
@@ -184,6 +185,10 @@ export function useSimulator() {
   const workspaceReady = ref(false)
   const profileMenuId = computed(() => profile.value.id)
   const profileScenarios = computed(() => workspace.value.scenarios.filter((scenario) => scenario.profileId === profile.value.id))
+  const simulationPlans = computed<SimulationPlan[]>(() => workspace.value.scenarios.flatMap((scenario) => {
+    const planProfile = workspace.value.profiles.find((item) => item.id === scenario.profileId)
+    return planProfile ? [{ profile: planProfile, scenario }] : []
+  }))
   const activeSchema = computed(() => workspace.value.schemas.find((schema) => schema.id === selectedSchemaId.value))
   const running = computed(() => devices.value.some((device) => !['stopped', 'error'].includes(device.status)))
   const onlineDevices = computed(() => devices.value.filter((device) => device.status === 'connected'))
@@ -252,17 +257,92 @@ export function useSimulator() {
     workspace.value.scenarios = workspace.value.scenarios.some((item) => item.id === scenario.id)
       ? workspace.value.scenarios.map((item) => item.id === scenario.id ? scenario : item)
       : [...workspace.value.scenarios, scenario]
+    await persistWorkspace('连接配置、场景和 Schema 已保存到本机。')
+  }
+
+  async function persistWorkspace(successMessage: string) {
     workspace.value.version = 1
     if (isDesktopApp()) {
       try {
         await saveWorkspace(workspace.value)
-        addLog('success', '连接配置、场景和 Schema 已保存到本机。')
+        addLog('success', successMessage)
       } catch (error) {
         addLog('error', `保存配置失败：${errorMessage(error)}`)
       }
     } else {
       addLog('info', '当前为浏览器预览，配置暂存于页面内存。')
     }
+  }
+
+  async function savePlan(plan: SimulationPlan) {
+    const nextProfile: BrokerProfile = {
+      ...plan.profile,
+      mqttVersion: plan.scenario.mqttVersion ?? plan.profile.mqttVersion,
+      username: plan.profile.username || null,
+      caCertPath: plan.profile.caCertPath || null,
+    }
+    const nextScenario: Scenario = {
+      ...plan.scenario,
+      profileId: nextProfile.id,
+      mqttVersion: nextProfile.mqttVersion,
+    }
+    const isActiveProfile = profile.value.id === nextProfile.id
+    const isActiveScenario = selectedScenarioId.value === nextScenario.id
+    if (isActiveProfile && (running.value || monitorRunning.value)) await stop()
+
+    workspace.value.profiles = workspace.value.profiles.some((item) => item.id === nextProfile.id)
+      ? workspace.value.profiles.map((item) => item.id === nextProfile.id ? nextProfile : item)
+      : [...workspace.value.profiles, nextProfile]
+    workspace.value.scenarios = workspace.value.scenarios.some((item) => item.id === nextScenario.id)
+      ? workspace.value.scenarios.map((item) => item.id === nextScenario.id ? nextScenario : item)
+      : [...workspace.value.scenarios, nextScenario]
+
+    if (isActiveProfile) profile.value = { ...nextProfile }
+    if (isActiveScenario) {
+      profile.value = { ...nextProfile }
+      password.value = ''
+      applyScenario(nextScenario)
+    }
+    await persistWorkspace('仿真方案已保存到本机。')
+    addLog('success', `已保存仿真方案“${nextScenario.name}”。`)
+  }
+
+  async function deletePlan(scenarioId: string) {
+    const scenario = workspace.value.scenarios.find((item) => item.id === scenarioId)
+    if (!scenario) return
+    if (workspace.value.scenarios.length <= 1) {
+      addLog('warning', '至少保留一个仿真方案。')
+      return
+    }
+
+    const wasActive = selectedScenarioId.value === scenarioId
+    if (wasActive && (running.value || monitorRunning.value)) await stop()
+    workspace.value.scenarios = workspace.value.scenarios.filter((item) => item.id !== scenarioId)
+    const hasRelatedScenario = workspace.value.scenarios.some((item) => item.profileId === scenario.profileId)
+    if (!hasRelatedScenario) {
+      workspace.value.profiles = workspace.value.profiles.filter((item) => item.id !== scenario.profileId)
+    }
+
+    if (wasActive) {
+      const fallbackScenario = workspace.value.scenarios[0]
+      const fallbackProfile = fallbackScenario
+        ? workspace.value.profiles.find((item) => item.id === fallbackScenario.profileId)
+        : undefined
+      if (fallbackScenario && fallbackProfile) {
+        profile.value = { ...fallbackProfile }
+        password.value = ''
+        applyScenario(fallbackScenario)
+      }
+    }
+    await persistWorkspace('仿真方案已更新到本机。')
+    addLog('info', `已删除仿真方案“${scenario.name}”。`)
+  }
+
+  async function selectPlan(scenarioId: string) {
+    const scenario = workspace.value.scenarios.find((item) => item.id === scenarioId)
+    if (!scenario) return
+    if (scenario.profileId !== profile.value.id) await selectProfile(scenario.profileId)
+    await selectScenario(scenarioId)
   }
 
   function applyScenario(scenario: Scenario | undefined) {
@@ -641,6 +721,11 @@ export function useSimulator() {
         workspace.value = loaded
         if (!workspace.value.profiles.length) workspace.value.profiles = [createDefaultProfile()]
         if (!workspace.value.schemas.length) workspace.value.schemas = [{ ...defaultSchema }]
+        for (const item of workspace.value.profiles) {
+          if (!workspace.value.scenarios.some((scenario) => scenario.profileId === item.id)) {
+            workspace.value.scenarios.push(createDefaultScenario(item.id, item.mqttVersion))
+          }
+        }
         profile.value = { ...(workspace.value.profiles[0] ?? createDefaultProfile()) }
         const scenario = workspace.value.scenarios.find((item) => item.profileId === profile.value.id)
         applyScenario(scenario ?? createDefaultScenario(profile.value.id, profile.value.mqttVersion, `draft-${crypto.randomUUID()}`))
@@ -706,6 +791,7 @@ export function useSimulator() {
     selectedScenarioId,
     scenarioName,
     profileScenarios,
+    simulationPlans,
     deviceBatch,
     topicTemplate,
     payloadFormat,
@@ -738,6 +824,9 @@ export function useSimulator() {
     failureCount,
     isDesktopApp,
     saveCurrent,
+    savePlan,
+    deletePlan,
+    selectPlan,
     selectProfile,
     selectScenario,
     createScenario,

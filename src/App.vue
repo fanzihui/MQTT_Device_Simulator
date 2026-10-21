@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-import { IconChevronDown, IconChevronRight, IconDeviceDesktopAnalytics, IconDeviceFloppy, IconPlus, IconSchema, IconServer, IconSettings, IconLayoutDashboard, IconX } from '@tabler/icons-vue'
+import { IconDeviceDesktopAnalytics, IconDeviceFloppy, IconLayoutDashboard, IconServer, IconSettings } from '@tabler/icons-vue'
 import ActivityPanel from './components/ActivityPanel.vue'
 import BrokerPanel from './components/BrokerPanel.vue'
 import PayloadEditor from './components/PayloadEditor.vue'
 import PublishPanel from './components/PublishPanel.vue'
 import SettingsPage from './components/SettingsPage.vue'
+import SimulationPlanDialog from './components/SimulationPlanDialog.vue'
 import { useSimulator } from './composables/useSimulator'
 import { useThemePreference } from './composables/useThemePreference'
 import { completeMcpTool } from './lib/tauri'
@@ -17,25 +18,19 @@ useThemePreference()
 const publishControlsCollapsed = ref(false)
 const activePage = ref<'workspace' | 'settings'>('workspace')
 const connectionDialogOpen = ref(false)
-const createDialogOpen = ref(false)
+const planDialogOpen = ref(false)
 const connectionDialogElement = ref<HTMLElement | null>(null)
-const createDialogElement = ref<HTMLElement | null>(null)
+const selectedPlan = computed(() => simulator.simulationPlans.find((plan) => plan.scenario.id === simulator.selectedScenarioId))
 let unlistenMcpTools: UnlistenFn | undefined
 
-watch([connectionDialogOpen, createDialogOpen], ([connectionOpen, createOpen]) => {
-  document.body.classList.toggle('modal-open', connectionOpen || createOpen)
+watch([connectionDialogOpen, planDialogOpen], ([connectionOpen, planOpen]) => {
+  document.body.classList.toggle('modal-open', connectionOpen || planOpen)
 })
 
 watch(connectionDialogOpen, async (open) => {
   if (!open) return
   await nextTick()
   connectionDialogElement.value?.focus()
-})
-
-watch(createDialogOpen, async (open) => {
-  if (!open) return
-  await nextTick()
-  createDialogElement.value?.focus()
 })
 
 onMounted(async () => {
@@ -130,23 +125,8 @@ onUnmounted(() => {
   document.body.classList.remove('modal-open')
 })
 
-function changeProfile(event: Event) {
-  simulator.selectProfile((event.target as HTMLSelectElement).value)
-}
-
 function closeConnectionDialog() {
   connectionDialogOpen.value = false
-}
-
-async function createProfileFromDialog() {
-  await simulator.createProfile()
-  createDialogOpen.value = false
-  connectionDialogOpen.value = true
-}
-
-function createScenarioFromDialog() {
-  simulator.createScenario()
-  createDialogOpen.value = false
 }
 </script>
 
@@ -175,18 +155,11 @@ function createScenarioFromDialog() {
       <div class="topbar-spacer" />
 
       <div v-if="activePage === 'workspace'" class="topbar-selectors" aria-label="工作区选择">
-        <label class="profile-select-wrap">
-          <span>连接配置</span>
-          <select :value="simulator.profile.id" @change="changeProfile">
-            <option v-for="profile in simulator.workspace.profiles" :key="profile.id" :value="profile.id">{{ profile.name }}</option>
-            <option v-if="!simulator.workspace.profiles.some((profile) => profile.id === simulator.profile.id)" :value="simulator.profile.id">{{ simulator.profile.name }}（未保存）</option>
-          </select>
-        </label>
-        <label class="profile-select-wrap scenario-select-wrap">
-          <span>模拟场景</span>
-          <select :value="simulator.selectedScenarioId" @change="simulator.selectScenario(($event.target as HTMLSelectElement).value)">
-            <option v-for="scenario in simulator.profileScenarios" :key="scenario.id" :value="scenario.id">{{ scenario.name }} · MQTT {{ scenario.mqttVersion ?? simulator.profile.mqttVersion }}</option>
-            <option v-if="!simulator.profileScenarios.some((scenario) => scenario.id === simulator.selectedScenarioId)" :value="simulator.selectedScenarioId">{{ simulator.scenarioName }}（未保存）</option>
+        <label class="profile-select-wrap plan-select-wrap">
+          <span>仿真方案</span>
+          <select :value="simulator.selectedScenarioId" @change="simulator.selectPlan(($event.target as HTMLSelectElement).value)">
+            <option v-for="plan in simulator.simulationPlans" :key="plan.scenario.id" :value="plan.scenario.id">{{ plan.scenario.name }} · {{ plan.profile.name }}</option>
+            <option v-if="!selectedPlan" :value="simulator.selectedScenarioId">{{ simulator.scenarioName }}（未保存）</option>
           </select>
         </label>
       </div>
@@ -202,7 +175,7 @@ function createScenarioFromDialog() {
       </div>
 
       <div v-if="activePage === 'workspace'" class="topbar-actions">
-        <button class="new-workspace-button" type="button" @click="createDialogOpen = true"><IconPlus aria-hidden="true" :size="16" /><span>新建</span><IconChevronDown aria-hidden="true" :size="14" /></button>
+        <button class="new-workspace-button" type="button" @click="planDialogOpen = true"><IconSettings aria-hidden="true" :size="16" /><span>方案管理</span></button>
         <button class="save-workspace-button" type="button" @click="simulator.saveCurrent">
           <IconDeviceFloppy aria-hidden="true" :size="16" /><span>保存</span>
         </button>
@@ -298,26 +271,15 @@ function createScenarioFromDialog() {
         </section>
       </div>
 
-      <div v-if="createDialogOpen" class="dialog-backdrop" role="presentation" @click.self="createDialogOpen = false" @keydown.esc.prevent.stop="createDialogOpen = false">
-        <section ref="createDialogElement" class="dialog-surface create-dialog" role="dialog" aria-modal="true" aria-labelledby="create-dialog-title" tabindex="-1">
-          <header class="dialog-heading">
-            <div><p class="eyebrow">工作区</p><h2 id="create-dialog-title">新建</h2><p>选择要创建的配置类型。</p></div>
-            <button class="dialog-close-button" type="button" aria-label="关闭新建弹窗" @click="createDialogOpen = false"><IconX aria-hidden="true" :size="18" /></button>
-          </header>
-          <div class="creation-options">
-            <button class="creation-option" type="button" @click="createProfileFromDialog">
-              <span class="creation-option-icon"><IconServer aria-hidden="true" :size="19" /></span>
-              <span class="creation-option-copy"><strong>连接配置</strong><small>为新的 MQTT Broker 创建连接，并打开设置表单。</small></span>
-              <IconChevronRight class="creation-option-arrow" aria-hidden="true" :size="18" />
-            </button>
-            <button class="creation-option" type="button" @click="createScenarioFromDialog">
-              <span class="creation-option-icon"><IconSchema aria-hidden="true" :size="19" /></span>
-              <span class="creation-option-copy"><strong>模拟场景</strong><small>创建当前连接下的新场景，随后可编辑载荷和发送选项。</small></span>
-              <IconChevronRight class="creation-option-arrow" aria-hidden="true" :size="18" />
-            </button>
-          </div>
-        </section>
-      </div>
+      <SimulationPlanDialog
+        v-if="planDialogOpen"
+        :plans="simulator.simulationPlans"
+        :selected-scenario-id="simulator.selectedScenarioId"
+        :select-plan="simulator.selectPlan"
+        :save-plan="simulator.savePlan"
+        :delete-plan="simulator.deletePlan"
+        @close="planDialogOpen = false"
+      />
     </Teleport>
   </div>
 </template>
