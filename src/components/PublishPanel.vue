@@ -1,13 +1,12 @@
 <script setup lang="ts">
 import type { DeviceStatus, MqttVersion, PublishOptions } from '../types'
-import { IconBroadcast, IconChevronDown, IconChevronLeft, IconChevronRight, IconChevronUp, IconClock, IconInfoCircle, IconLock, IconMouse, IconPlayerPlay, IconPlayerStop, IconPlus, IconSend, IconX } from '@tabler/icons-vue'
+import { IconChevronDown, IconChevronLeft, IconChevronRight, IconChevronUp, IconClock, IconInfoCircle, IconLock, IconMouse, IconPlayerPlay, IconPlayerStop, IconPlus, IconSend, IconX } from '@tabler/icons-vue'
 
 const options = defineModel<PublishOptions>('options', { required: true })
 const collapsed = defineModel<boolean>('collapsed', { required: true })
 const mode = defineModel<'manual' | 'periodic'>('mode', { required: true })
 const intervalSeconds = defineModel<number>('intervalSeconds', { required: true })
 const countPerDevice = defineModel<number | null>('countPerDevice', { required: true })
-const monitorTopics = defineModel<string>('monitorTopics', { required: true })
 
 const props = defineProps<{
   mqttVersion: MqttVersion
@@ -15,7 +14,6 @@ const props = defineProps<{
   running: boolean
   scheduleRunning: boolean
   monitorRunning: boolean
-  monitorEnabled: boolean
   successCount: number
   failureCount: number
 }>()
@@ -24,8 +22,6 @@ const emit = defineEmits<{
   publish: []
   startSchedule: []
   stopSchedule: []
-  startMonitor: []
-  stopMonitor: []
 }>()
 
 const onlineCount = () => props.devices.filter((device) => device.status === 'connected').length
@@ -166,16 +162,6 @@ function updateCount(value: string) {
         </div>
       </div>
 
-      <div class="section-divider" />
-      <div class="monitor-heading">
-        <div><h3>消息订阅</h3></div>
-        <span class="monitor-status" :class="{ live: monitorRunning }"><i />{{ monitorRunning ? '监听中' : '未启动' }}</span>
-      </div>
-      <label class="sr-only" for="monitor-topics">订阅主题过滤器</label>
-      <textarea id="monitor-topics" v-model="monitorTopics" class="monitor-input mono" rows="2" placeholder="输入主题过滤器，每行一个&#10;例如：sensors/+/telemetry" />
-      <button v-if="!monitorRunning" class="monitor-button" :disabled="!monitorEnabled" type="button" @click="emit('startMonitor')"><IconBroadcast aria-hidden="true" :size="16" />开始监听</button>
-      <button v-else class="monitor-button stop-monitor" type="button" @click="emit('stopMonitor')"><IconPlayerStop aria-hidden="true" :size="16" />停止监听</button>
-      <p class="monitor-caption">使用独立监视客户端订阅，不占用模拟设备连接</p>
     </section>
   </aside>
 </template>

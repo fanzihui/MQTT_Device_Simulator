@@ -177,6 +177,11 @@ onUnmounted(() => {
 <style scoped>
 .activity-card { min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .activity-card.is-fullscreen { position: fixed; inset: 14px; z-index: 120; width: auto; height: auto; min-height: 0; max-height: none; overflow: hidden; border-color: var(--line-strong); border-radius: 12px; box-shadow: 0 24px 90px #0008; }
+.activity-card:not(.is-fullscreen) .activity-topbar { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "title action" "tabs tabs"; align-items: center; gap: 6px 10px; padding: 10px 12px 0; }
+.activity-card:not(.is-fullscreen) .activity-title { grid-area: title; min-width: 0; }
+.activity-card:not(.is-fullscreen) .activity-tabs { grid-area: tabs; width: 100%; min-width: 0; height: 38px; justify-content: space-between; gap: 8px; margin: 0; }
+.activity-card:not(.is-fullscreen) .activity-cap { display: none; }
+.activity-card:not(.is-fullscreen) .activity-fullscreen-button { grid-area: action; margin-left: 0; }
 .activity-topbar { min-height: 62px; display: flex; align-items: center; gap: 18px; padding: 0 18px; border-bottom: 1px solid var(--line); }
 .activity-title { display: flex; align-items: center; gap: 9px; flex: 0 0 auto; }
 .activity-icon { width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 7px; color: var(--accent); background: var(--accent-soft); }
@@ -192,8 +197,12 @@ onUnmounted(() => {
 .activity-cap { color: var(--subtle); font-size: 10px; white-space: nowrap; }
 .activity-fullscreen-button { min-height: 31px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; margin-left: 2px; border: 1px solid var(--line-strong); border-radius: 6px; padding: 0 8px; color: var(--ink-soft); background: var(--surface-raised); font-size: 10px; font-weight: 650; white-space: nowrap; cursor: pointer; }
 .activity-fullscreen-button:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
-.activity-content { flex: 1; min-width: 0; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.18fr) minmax(260px, .82fr); }
+.activity-content { flex: 1; min-width: 0; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(180px, .9fr) minmax(180px, 1.1fr); }
 .activity-content > * { min-width: 0; }
+.activity-card:not(.is-fullscreen) .table-head, .activity-card:not(.is-fullscreen) .message-row { grid-template-columns: minmax(0, 1fr) 34px 67px 60px; gap: 5px; min-width: 0; padding-inline: 9px; }
+.activity-card:not(.is-fullscreen) .table-head > span:nth-child(2), .activity-card:not(.is-fullscreen) .table-head > span:nth-child(3), .activity-card:not(.is-fullscreen) .message-row > span:nth-child(2), .activity-card:not(.is-fullscreen) .message-row > span:nth-child(3) { display: none; }
+.activity-card:not(.is-fullscreen) .table-head { height: 32px; }
+.activity-card:not(.is-fullscreen) .message-row { min-height: 38px; }
 .message-list { min-width: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
 .table-head, .message-row { display: grid; grid-template-columns: minmax(150px, 1.2fr) minmax(90px, .72fr) minmax(170px, 1.35fr) 52px 124px 92px; align-items: center; gap: 12px; }
 .table-head { position: sticky; top: 0; z-index: 1; min-width: 820px; height: 38px; padding: 0 16px; color: var(--subtle); background: color-mix(in srgb, var(--surface-muted) 50%, transparent); border-bottom: 1px solid var(--line); font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
@@ -217,6 +226,7 @@ onUnmounted(() => {
 .empty-activity-icon { margin-bottom: 3px; color: var(--empty-state-icon); }
 .empty-activity strong { color: var(--ink-soft); font-size: 12px; font-weight: 600; }
 .empty-activity small { max-width: 360px; color: var(--subtle); font-size: 11px; line-height: 1.55; }
+.activity-card:not(.is-fullscreen) .message-detail { border-left: 0; border-top: 1px solid var(--line); }
 .message-detail { min-width: 0; display: flex; flex-direction: column; border-left: 1px solid var(--line); background: var(--surface-muted); }
 .detail-heading { min-height: 48px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 12px; border-bottom: 1px solid var(--line); }
 .detail-heading > * { min-width: 0; }
@@ -257,7 +267,7 @@ onUnmounted(() => {
 .activity-card.is-fullscreen .log-message { overflow: visible; overflow-wrap: anywhere; text-overflow: clip; white-space: normal; line-height: 1.55; }
 @media (max-width: 1120px) {
   .activity-card { min-height: 372px; }
-  .activity-content { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(150px, auto) minmax(160px, 230px); }
+  .activity-card:not(.is-fullscreen) .activity-content { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(150px, auto) minmax(160px, 230px); }
   .message-detail { border-left: 0; border-top: 1px solid var(--line); }
   .activity-card.is-fullscreen .activity-content { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(240px, .8fr); }
 }

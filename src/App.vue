@@ -4,10 +4,12 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event'
 import { IconDeviceDesktopAnalytics, IconDeviceFloppy, IconLayoutDashboard, IconPlus, IconServer, IconSettings } from '@tabler/icons-vue'
 import ActivityPanel from './components/ActivityPanel.vue'
 import BrokerPanel from './components/BrokerPanel.vue'
+import ConnectionOverviewPanel from './components/ConnectionOverviewPanel.vue'
 import PayloadEditor from './components/PayloadEditor.vue'
 import PublishPanel from './components/PublishPanel.vue'
 import SettingsPage from './components/SettingsPage.vue'
 import SimulationPlanDialog from './components/SimulationPlanDialog.vue'
+import SubscriptionPanel from './components/SubscriptionPanel.vue'
 import { useSimulator } from './composables/useSimulator'
 import { useThemePreference } from './composables/useThemePreference'
 import { completeMcpTool } from './lib/tauri'
@@ -189,40 +191,54 @@ function openPlanDialog(initialMode: 'list' | 'create') {
     </header>
 
     <main v-if="activePage === 'workspace'" class="workspace-main">
-      <div class="workbench-grid" :class="{ 'publish-collapsed': publishControlsCollapsed }">
-        <PayloadEditor
-          v-model:format="simulator.payloadFormat"
-          v-model:topic-template="simulator.topicTemplate"
-          v-model:json-template="simulator.jsonTemplate"
-          v-model:schemas="simulator.workspace.schemas"
-          v-model:schema-id="simulator.selectedSchemaId"
-          v-model:message-type="simulator.messageType"
-          v-model:proto-values="simulator.protoValues"
-          v-model:field-ranges="simulator.fieldRanges"
-          @save="simulator.saveCurrent"
-        />
+      <div class="workbench-grid">
+        <aside class="connection-column">
+          <ConnectionOverviewPanel
+            :profile="simulator.profile"
+            :mqtt-version="simulator.mqttVersion"
+            :devices="simulator.devices"
+            :connecting="simulator.connecting"
+          />
+          <SubscriptionPanel
+            v-model:topics="simulator.monitorTopics"
+            :monitor-running="simulator.monitorRunning"
+            :monitor-enabled="simulator.isDesktopApp()"
+            @start="simulator.startMonitor"
+            @stop="simulator.stopMonitor"
+          />
+        </aside>
 
-        <PublishPanel
-          v-model:collapsed="publishControlsCollapsed"
-          v-model:options="simulator.publishOptions"
-          v-model:mode="simulator.publishMode"
-          v-model:interval-seconds="simulator.intervalSeconds"
-          v-model:count-per-device="simulator.countPerDevice"
-          v-model:monitor-topics="simulator.monitorTopics"
-          :devices="simulator.devices"
-          :mqtt-version="simulator.mqttVersion"
-          :running="simulator.running"
-          :schedule-running="simulator.scheduleRunning"
-          :monitor-running="simulator.monitorRunning"
-          :monitor-enabled="simulator.isDesktopApp()"
-          :success-count="simulator.successCount"
-          :failure-count="simulator.failureCount"
-          @publish="simulator.publishOnce"
-          @start-schedule="simulator.startSchedule"
-          @stop-schedule="simulator.stopSchedule"
-          @start-monitor="simulator.startMonitor"
-          @stop-monitor="simulator.stopMonitor"
-        />
+        <div class="composer-column">
+          <PayloadEditor
+            v-model:format="simulator.payloadFormat"
+            v-model:topic-template="simulator.topicTemplate"
+            v-model:json-template="simulator.jsonTemplate"
+            v-model:schemas="simulator.workspace.schemas"
+            v-model:schema-id="simulator.selectedSchemaId"
+            v-model:message-type="simulator.messageType"
+            v-model:proto-values="simulator.protoValues"
+            v-model:field-ranges="simulator.fieldRanges"
+            @save="simulator.saveCurrent"
+          />
+
+          <PublishPanel
+            v-model:collapsed="publishControlsCollapsed"
+            v-model:options="simulator.publishOptions"
+            v-model:mode="simulator.publishMode"
+            v-model:interval-seconds="simulator.intervalSeconds"
+            v-model:count-per-device="simulator.countPerDevice"
+            :devices="simulator.devices"
+            :mqtt-version="simulator.mqttVersion"
+            :running="simulator.running"
+            :schedule-running="simulator.scheduleRunning"
+            :monitor-running="simulator.monitorRunning"
+            :success-count="simulator.successCount"
+            :failure-count="simulator.failureCount"
+            @publish="simulator.publishOnce"
+            @start-schedule="simulator.startSchedule"
+            @stop-schedule="simulator.stopSchedule"
+          />
+        </div>
 
         <ActivityPanel
           v-model:tab="simulator.selectedActivityTab"
@@ -291,3 +307,21 @@ function openPlanDialog(initialMode: 'list' | 'create') {
     </Teleport>
   </div>
 </template>
+
+<style scoped>
+.composer-column :deep(.payload-card) {
+  border-bottom: 0;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.composer-column :deep(.publish-card),
+.composer-column :deep(.publish-rail) {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+}
+
+.composer-column :deep(.publish-card) {
+  padding: 9px 14px 10px;
+}
+</style>
