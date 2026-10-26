@@ -35,6 +35,26 @@ jobs:
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
 
+      - name: validate release versions
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+        run: |
+          $tagVersion = ($env:RELEASE_TAG).TrimStart('v')
+          $packageVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $tauriVersion = (Get-Content src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          $cargoManifest = Get-Content src-tauri/Cargo.toml -Raw
+          $cargoVersionMatch = [regex]::Match($cargoManifest, '(?m)^version\s*=\s*"([^"]+)"')
+          if (-not $cargoVersionMatch.Success) {
+            throw "Unable to read src-tauri/Cargo.toml package version."
+          }
+          $cargoVersion = $cargoVersionMatch.Groups[1].Value
+          $versions = @($packageVersion, $tauriVersion, $cargoVersion)
+          if (($versions | Where-Object { $_ -ne $tagVersion }).Count -gt 0) {
+            throw "Release tag v$tagVersion must match package.json, tauri.conf.json, and Cargo.toml versions. Found: $($versions -join ', ')."
+          }
+          Write-Host "Validated release version v$tagVersion."
+
       - name: setup pnpm
         uses: pnpm/action-setup@v4
         with:

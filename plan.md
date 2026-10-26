@@ -1,6 +1,6 @@
 # MQTT 设备模拟器实现计划
 
-> **面向后续实现者：** 按下列任务顺序复核实现。任务以复选框记录；代码与构建阶段已完成，目标 Windows 环境中的端到端人工验收仍需执行。
+> **面向后续实现者：** 本计划记录已完成实现、待验收事项和下一阶段。自动更新和 A 版图标已接入代码，Release 与真实 Broker 的 Windows 端到端验收尚未完成。
 
 **目标：** 提供一个可配置 MQTT Broker、模拟最多 100 台虚拟设备、编辑和发布 JSON/Protobuf 载荷、监视消息并按需向 AI 客户端开放 MCP 的 Windows 桌面工作台。
 
@@ -9,6 +9,8 @@
 **技术栈：** Tauri 2、Vue 3 Composition API、TypeScript、Vite、Rust、Tokio、rumqttc、Axum、protobufjs。
 
 **规格：** spec.md
+
+**当前状态（2026-10-26）：** 前端生产构建、Rust 编译检查和 pnpm 9.15.5 冻结锁安装均通过。浏览器预览截图已保存到 `output/playwright/project-docs/`。配置的 GitHub `latest.json` 当前返回 404，首个签名 Release 尚未完成。发现 Tauri `devUrl` 为 `1420`、Vite 开发端口为 `1430`，需在桌面验收前对齐。
 
 ## 全局约束
 
@@ -21,14 +23,17 @@
 - 断线重连退避封顶 30 秒；离线时不排队积压样本；停止时清理发送任务。
 - MCP 默认关闭，仅绑定 127.0.0.1:39541/mcp，使用 Bearer 令牌；默认只开放读取权限。
 - 自动填充只补空字段，保留已有值。
+- 自动更新仅用于 Tauri 桌面版；更新包必须通过配置的 updater 公钥签名校验，GitHub 发布标签与三处版本号一致。
 - 不新增未经请求的自动化测试；以用户行为验收，并使用构建与 Rust 检查验证代码状态。
 
 ## 文件职责
 
-- **src/App.vue**：顶部导航、工作台和设置页切换、MCP 工具请求转发。
+- **src/App.vue**：顶部导航、工作台和设置页切换、启动时更新检查、更新提示、MCP 工具请求转发。
 - **src/components/BrokerPanel.vue**：Broker 配置、虚拟设备批次、连接操作。
+- **src/components/ConnectionOverviewPanel.vue**：当前 Broker、协议和在线设备概览。
+- **src/components/SubscriptionPanel.vue**：多个监听主题过滤器与独立监视客户端的启停。
 - **src/components/PayloadEditor.vue**：JSON/Protobuf 模式、Schema 编辑和字段表单。
-- **src/components/PublishPanel.vue**：发布属性、手动/定时发送与订阅控制。
+- **src/components/PublishPanel.vue**：QoS、Retain、MQTT 5 属性、手动/定时发送控制。
 - **src/components/ActivityPanel.vue**：已发布消息、接收消息和系统日志。
 - **src/components/SettingsPage.vue**：主题、MCP 服务、令牌、权限和 Codex 配置。
 - **src/composables/useSimulator.ts**：工作台状态、Tauri 命令和事件、连接/发送/订阅生命周期。
@@ -40,6 +45,8 @@
 - **src-tauri/src/mcp.rs**：MCP HTTP 服务、Bearer 鉴权、工具列表、分组授权。
 - **src-tauri/src/storage.rs**：版本化本地工作区持久化。
 - **src-tauri/src/lib.rs**：Tauri 状态管理与命令注册。
+- **src-tauri/tauri.conf.json、src-tauri/capabilities/default.json**：Windows 图标、更新清单、公钥与插件权限。
+- **.github/workflows/release.yml、docs/releasing-updates.md**：签名 Release 发布和版本约束。
 - **README.md、spec.md、plan.md**：用户文档、产品规格及实现与验收跟踪。
 
 ## 验收重点
@@ -92,9 +99,9 @@
 
 **交互要求：** 顶部导航和选择器易于识别；连接设置与发送控制可收起；载荷编辑和消息活动区在主流程中保持清晰。
 
-- [x] 建立简体中文三列工作台及底部活动视图。
+- [x] 建立简体中文三列工作台：左侧连接概览/订阅，中间载荷/发送控制，右侧消息记录/载荷详情。
 - [x] 依据深色工程工作台概念方向调整视觉层级、配色、间距与控件样式。
-- [x] 添加连接设置与发送控制的独立折叠状态。
+- [x] 顶部连接设置对话框及可折叠发送控制。
 - [x] 完成 Profile、场景、设备、载荷、发送和监视器操作的前后端连接。
 - [x] 前端构建已在此前通过。
 
@@ -125,9 +132,10 @@
 
 **主要模块：** 根目录 README、产品规格和实现计划。
 
-- [x] 将 README 改写为简体中文，包含环境、开发、构建、使用、协议能力和安全边界。
-- [x] 在 spec.md 记录问题、方案、用户故事、实现决策、验收标准、测试决策和范围外事项。
-- [x] 在 plan.md 记录模块职责、实施任务、复核重点和剩余验收工作。
+- [x] README 说明环境、开发、构建、使用、协议能力、安全边界、自动更新和 GitHub 发布。
+- [x] README 加入浅色/深色工作台截图及 Mermaid 数据流程图。
+- [x] spec.md 记录产品问题、方案、用户故事、更新发布约束和验收标准。
+- [x] plan.md 记录模块职责、实现状态、剩余验收与后续路线图。
 
 ### 任务 8：目标 Windows 环境人工验收
 
@@ -140,4 +148,44 @@
 - [ ] 验证 MCP 默认关闭、回环监听、Bearer 鉴权、Codex 客户端连接和四类权限开关。
 - [ ] 在目标 Windows 环境构建并安装 NSIS 包，确认数据保留与密码/活动记录不持久化。
 
-已知此前通过的本地检查：npm run build、cargo check、cargo fmt --check。本轮仅编辑文档，没有重新运行构建或验收命令。
+### 任务 9：A 版品牌图标与自动更新
+
+**主要模块：** Tauri updater 插件、启动检查与提示、Windows 安装包图标、GitHub Release 工作流。
+
+- [x] 用 A 版图标覆盖 Tauri Windows ICO，并在工作台品牌位置显示 A 版标识。
+- [x] 桌面启动时检查 GitHub `latest.json`；浏览器预览和更新检查失败不影响主界面。
+- [x] 有更新时展示版本和说明，允许稍后或下载并安装；Windows 安装器负责重启。
+- [x] 注册 Tauri updater 插件并授予最小必需权限。
+- [x] 在 `v*` Release 工作流校验标签与三个版本号一致，并记录签名私钥 Secrets 要求。
+- [ ] 首个签名 Release 发布后，使用旧版 Windows 安装包完成检查、签名校验、延后、安装和重启验收。
+
+## 下一阶段路线图
+
+### P0：桌面启动与首个签名 Release 验收
+
+这是开始新增功能前的发布门槛。
+
+1. **统一开发端口。** 将 `src-tauri/tauri.conf.json` 的 `devUrl` 与 `package.json` 中 Vite 实际监听端口统一为 `1430`，然后确认 `pnpm tauri dev` 能启动桌面窗口。
+2. **完成 Windows 功能走查。** 使用 Windows 10/11 x64 安装包，人工验证 MQTT 3.1.1/5.0、TLS/CA、批次连接、单设备重试、重连、JSON/Protobuf 发布、QoS、主题监视、主题切换和本地数据恢复。
+3. **发布第一个带签名版本。** 确认 GitHub Secrets 与配置公钥配对；三个应用版本号一致；推送匹配的 `vX.Y.Z` 标签；确认 Release 包含 NSIS 安装包、`.sig` 和 `latest.json`。
+4. **完成旧版升级演练。** 从旧版启动；覆盖无更新、网络不可用、有效签名更新、稍后处理、签名无效和更新后自动重启场景。
+
+**P0 完成条件：** Windows 原生开发命令可用；MQTT/MCP 主要流程通过人工验收；首个 Release 可被旧版检查并安全安装；错误签名被拒绝；安装后能重新启动到新版本。
+
+**当前阻塞：** 更新清单地址返回 404；需要先发布首个签名 Release。更新发布步骤见 [docs/releasing-updates.md](docs/releasing-updates.md)。
+
+### P1：提升联调证据与配置复用
+
+完成 P0 后按实际使用反馈排序，优先评估：
+
+- 导出选中的消息、载荷与相关日志，便于问题复现和跨团队反馈。
+- 导入/导出连接配置、模拟方案和 Schema；导出文件明确不包含密码。
+- 加强连接诊断，显示最近错误、重连次数和设备级发送结果，并提供可复制的诊断摘要。
+
+每项先补充用户故事和验收标准，再决定是否进入实现；不把此候选清单视作已批准的功能范围。
+
+### P2：扩展协议与规模
+
+根据 P1 使用情况重新评估当前范围之外的能力：多文件 `.proto` 依赖、每设备独立凭据、更高规模压力测试和远程/云同步。每项需要单独确定安全边界、资源上限和验收指标。
+
+此前的本地检查记录为：`npm run build`、`cargo check`、`cargo fmt --check`。本次更新文档并生成工作台截图，没有重新执行构建或 Cargo 检查；真实 Broker、MCP 和更新安装仍待 Windows 桌面人工验收。

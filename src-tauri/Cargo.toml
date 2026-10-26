@@ -25,3 +25,4 @@ tauri = { version = "2", features = [] }
 tokio = { version = "1", features = ["sync", "time", "rt-multi-thread", "net"] }
 tokio-util = { version = "0.7", features = ["rt"] }
 uuid = { version = "1", features = ["v4"] }
+tauri-plugin-updater = "2"

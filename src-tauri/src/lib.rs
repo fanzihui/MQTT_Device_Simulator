@@ -5,6 +5,7 @@ mod storage;
 
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(mqtt::MqttService::default())
         .manage(mcp::McpService::default())
         .invoke_handler(tauri::generate_handler![

@@ -1,0 +1,14 @@
+{
+  "browser": {
+    "launchOptions": {
+      "headless": false
+    },
+    "contextOptions": {
+      "viewport": {
+        "width": 1500,
+        "height": 980
+      },
+      "deviceScaleFactor": 1
+    }
+  }
+}

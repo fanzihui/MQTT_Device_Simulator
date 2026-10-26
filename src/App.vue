@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-import { IconDeviceDesktopAnalytics, IconDeviceFloppy, IconLayoutDashboard, IconPlus, IconServer, IconSettings } from '@tabler/icons-vue'
+import { IconDeviceFloppy, IconLayoutDashboard, IconPlus, IconServer, IconSettings } from '@tabler/icons-vue'
+import type { Update } from '@tauri-apps/plugin-updater'
+import appIcon from './assets/app-icon.png'
 import ActivityPanel from './components/ActivityPanel.vue'
 import BrokerPanel from './components/BrokerPanel.vue'
 import ConnectionOverviewPanel from './components/ConnectionOverviewPanel.vue'
@@ -23,11 +25,21 @@ const connectionDialogOpen = ref(false)
 const planDialogOpen = ref(false)
 const planDialogInitialMode = ref<'list' | 'create'>('list')
 const connectionDialogElement = ref<HTMLElement | null>(null)
+const updateDialogElement = ref<HTMLElement | null>(null)
+const updateDialogOpen = ref(false)
+const currentVersion = ref('')
+const updateVersion = ref('')
+const updateNotes = ref('')
+const updateStatus = ref<'idle' | 'downloading' | 'installing' | 'error'>('idle')
+const updateProgress = ref(0)
+const updateProgressKnown = ref(false)
+const updateError = ref('')
 const selectedPlan = computed(() => simulator.simulationPlans.find((plan) => plan.scenario.id === simulator.selectedScenarioId))
 let unlistenMcpTools: UnlistenFn | undefined
+let pendingUpdate: Update | null = null
 
-watch([connectionDialogOpen, planDialogOpen], ([connectionOpen, planOpen]) => {
-  document.body.classList.toggle('modal-open', connectionOpen || planOpen)
+watch([connectionDialogOpen, planDialogOpen, updateDialogOpen], ([connectionOpen, planOpen, updateOpen]) => {
+  document.body.classList.toggle('modal-open', connectionOpen || planOpen || updateOpen)
 })
 
 watch(connectionDialogOpen, async (open) => {
@@ -36,8 +48,15 @@ watch(connectionDialogOpen, async (open) => {
   connectionDialogElement.value?.focus()
 })
 
+watch(updateDialogOpen, async (open) => {
+  if (!open) return
+  await nextTick()
+  updateDialogElement.value?.focus()
+})
+
 onMounted(async () => {
   if (!simulator.isDesktopApp()) return
+  void checkForUpdates()
   unlistenMcpTools = await listen<McpToolRequest>('mcp-tool-request', async ({ payload }) => {
     try {
       let result: unknown
@@ -136,6 +155,64 @@ function openPlanDialog(initialMode: 'list' | 'create') {
   planDialogInitialMode.value = initialMode
   planDialogOpen.value = true
 }
+
+async function checkForUpdates() {
+  try {
+    const { check } = await import('@tauri-apps/plugin-updater')
+    const update = await check({ timeout: 15_000 })
+    if (!update) return
+
+    pendingUpdate = update
+    currentVersion.value = update.currentVersion
+    updateVersion.value = update.version
+    updateNotes.value = update.body?.trim() ?? ''
+    updateStatus.value = 'idle'
+    updateDialogOpen.value = true
+  } catch (error) {
+    console.warn('自动更新检查失败。', error)
+  }
+}
+
+async function installUpdate() {
+  if (!pendingUpdate || updateStatus.value === 'downloading' || updateStatus.value === 'installing') return
+
+  updateStatus.value = 'downloading'
+  updateProgress.value = 0
+  updateProgressKnown.value = false
+  updateError.value = ''
+  let contentLength = 0
+  let downloadedBytes = 0
+
+  try {
+    await pendingUpdate.downloadAndInstall((event) => {
+      if (event.event === 'Started') {
+        contentLength = event.data.contentLength ?? 0
+        updateProgressKnown.value = contentLength > 0
+      } else if (event.event === 'Progress') {
+        downloadedBytes += event.data.chunkLength
+        if (contentLength > 0) {
+          updateProgress.value = Math.min(100, Math.floor((downloadedBytes / contentLength) * 100))
+        }
+      } else if (event.event === 'Finished') {
+        updateProgress.value = 100
+      }
+    }, { restartAfterInstall: true })
+    updateStatus.value = 'installing'
+  } catch (error) {
+    updateStatus.value = 'error'
+    updateError.value = error instanceof Error ? error.message : String(error)
+  }
+}
+
+async function dismissUpdateDialog() {
+  if (updateStatus.value === 'downloading' || updateStatus.value === 'installing') return
+  updateDialogOpen.value = false
+  updateStatus.value = 'idle'
+  updateError.value = ''
+  const update = pendingUpdate
+  pendingUpdate = null
+  if (update) await update.close().catch(() => undefined)
+}
 </script>
 
 <template>
@@ -143,7 +220,7 @@ function openPlanDialog(initialMode: 'list' | 'create') {
     <header class="topbar">
       <div class="brand-lockup">
         <div class="brand-mark" aria-hidden="true">
-          <IconDeviceDesktopAnalytics aria-hidden="true" :size="20" :stroke-width="1.8" />
+          <img class="brand-icon-image" :src="appIcon" alt="" />
         </div>
         <div class="brand-copy">
           <strong>Telemetry <span>Studio</span></strong>
@@ -304,11 +381,107 @@ function openPlanDialog(initialMode: 'list' | 'create') {
         :delete-plan="simulator.deletePlan"
         @close="planDialogOpen = false"
       />
+
+      <div
+        v-if="updateDialogOpen"
+        class="dialog-backdrop update-backdrop"
+        role="presentation"
+        @click.self="dismissUpdateDialog"
+        @keydown.esc.prevent.stop="dismissUpdateDialog"
+      >
+        <section
+          ref="updateDialogElement"
+          class="dialog-surface update-dialog"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="update-dialog-title"
+          tabindex="-1"
+        >
+          <div class="update-dialog-header">
+            <img class="update-dialog-icon" :src="appIcon" alt="" />
+            <div>
+              <p class="update-eyebrow">MQTT DEVICE SIMULATOR</p>
+              <h2 id="update-dialog-title">发现新版本 {{ updateVersion }}</h2>
+              <p class="update-version-line">当前版本 {{ currentVersion }} · 安装完成后自动重新启动</p>
+            </div>
+          </div>
+
+          <div v-if="updateNotes" class="update-notes">{{ updateNotes }}</div>
+          <p v-else class="update-notes update-notes-empty">此版本包含模拟器更新。安装包将经过签名校验后安装。</p>
+
+          <div v-if="updateStatus === 'downloading'" class="update-progress-section" role="status" aria-live="polite">
+            <div class="update-progress-track">
+              <div
+                class="update-progress-fill"
+                :class="{ indeterminate: !updateProgressKnown }"
+                :style="updateProgressKnown ? { width: `${updateProgress}%` } : undefined"
+              />
+            </div>
+            <span>{{ updateProgressKnown ? `正在下载更新 ${updateProgress}%` : '正在下载更新…' }}</span>
+          </div>
+          <p v-else-if="updateStatus === 'installing'" class="update-status-message" role="status">安装程序已启动，模拟器即将重新启动。</p>
+          <p v-else-if="updateStatus === 'error'" class="update-error-message" role="alert">更新失败：{{ updateError }}</p>
+
+          <div class="update-dialog-actions">
+            <button
+              v-if="updateStatus === 'idle' || updateStatus === 'error'"
+              class="update-later-button"
+              type="button"
+              @click="dismissUpdateDialog"
+            >
+              稍后提醒
+            </button>
+            <button
+              v-if="updateStatus === 'idle'"
+              class="update-install-button"
+              type="button"
+              @click="installUpdate"
+            >
+              下载并安装
+            </button>
+            <button
+              v-else-if="updateStatus === 'error'"
+              class="update-install-button"
+              type="button"
+              @click="installUpdate"
+            >
+              重试更新
+            </button>
+            <button v-else class="update-install-button" type="button" disabled>
+              {{ updateStatus === 'downloading' ? '正在更新…' : '正在重启…' }}
+            </button>
+          </div>
+        </section>
+      </div>
     </Teleport>
   </div>
 </template>
 
 <style scoped>
+.brand-icon-image { width: 100%; height: 100%; display: block; border-radius: inherit; object-fit: cover; }
+
+.update-dialog { width: min(480px, 100%); padding: 22px; }
+.update-dialog-header { display: flex; align-items: center; gap: 14px; }
+.update-dialog-icon { width: 48px; height: 48px; flex: 0 0 48px; border-radius: 12px; }
+.update-eyebrow { margin: 0 0 4px; color: var(--accent); font: 650 9px var(--font-mono); letter-spacing: .12em; }
+.update-dialog-header h2 { margin: 0; color: var(--ink); font-size: 18px; letter-spacing: -.02em; }
+.update-version-line { margin: 5px 0 0; color: var(--muted); font-size: 11px; line-height: 1.45; }
+.update-notes { max-height: 180px; overflow: auto; margin: 18px 0 0; border: 1px solid var(--line); border-radius: 8px; padding: 12px; color: var(--ink-soft); background: var(--surface-muted); font-size: 12px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+.update-notes-empty { color: var(--muted); }
+.update-progress-section { display: grid; gap: 8px; margin-top: 16px; color: var(--muted); font-size: 11px; }
+.update-progress-track { height: 6px; overflow: hidden; border-radius: 999px; background: var(--surface-raised); }
+.update-progress-fill { height: 100%; border-radius: inherit; background: var(--accent-strong); transition: width .16s ease; }
+.update-progress-fill.indeterminate { width: 36%; animation: update-progress 1.25s ease-in-out infinite alternate; }
+.update-status-message, .update-error-message { margin: 16px 0 0; font-size: 11px; line-height: 1.5; }
+.update-status-message { color: var(--green); }
+.update-error-message { color: var(--danger); overflow-wrap: anywhere; }
+.update-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+.update-dialog-actions button { min-height: 36px; border: 1px solid var(--line-strong); border-radius: 7px; padding: 0 12px; font-size: 11px; font-weight: 650; cursor: pointer; }
+.update-later-button { color: var(--ink-soft); background: var(--surface-raised); }
+.update-install-button { color: #fff; border-color: var(--accent-strong) !important; background: var(--accent-strong); }
+.update-install-button:disabled { opacity: .65; }
+@keyframes update-progress { from { transform: translateX(-35%); } to { transform: translateX(195%); } }
+
 .composer-column :deep(.payload-card) {
   border-bottom: 0;
   border-bottom-left-radius: 0;
