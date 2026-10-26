@@ -188,7 +188,7 @@ MCP 工具按四类权限控制：读取状态（默认开启）、连接控制�
 
 桌面应用启动后会检查 GitHub 最新 Release。若发现更高版本，会显示说明和版本号；用户可稍后处理，或确认下载并安装。安装包通过 updater 公钥校验，Windows 安装完成后自动重启。断网、暂时无法读取 Release 或检查超时不会阻止应用启动。
 
-发布工作流由 `v*` Git 标签触发。发布前需将以下文件中的版本号设为同一个值，然后推送对应标签：
+本地执行 `pnpm tauri build` 不会生成 GitHub updater 清单 `latest.json`；该清单由 GitHub Release 工作流根据签名更新包生成并上传。发布工作流由 `v*` Git 标签触发，并会检查 Release 中包含 `latest.json` 和签名资产。发布前需将以下文件中的版本号设为同一个值，然后推送对应标签：
 
 - `package.json`
 - `src-tauri/tauri.conf.json`
@@ -196,7 +196,7 @@ MCP 工具按四类权限控制：读取状态（默认开启）、连接控制�
 
 例如版本为 `0.2.0` 时推送标签 `v0.2.0`。GitHub Actions 会构建 Windows 安装包并上传 `latest.json` 和签名文件。仓库必须配置 `TAURI_SIGNING_PRIVATE_KEY`，如私钥有密码还需配置 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`；私钥需与 `src-tauri/tauri.conf.json` 的 updater 公钥配对。完整步骤见 [docs/releasing-updates.md](docs/releasing-updates.md)。
 
-截至 2026-10-26，配置的 `latest.json` 地址尚未返回发布清单。首个带签名的 GitHub Release 发布后，客户端才会检测到可用更新。
+截至 2026-10-26，当前 GitHub Release 地址仍返回 404。已为 Tauri 构建开启更新签名产物，并在 Release 工作流中加入清单/签名资产检查；已发布但缺少 `latest.json` 的版本需要重新运行对应标签的工作流，或由下一个版本补齐。
 
 ## 数据与安全边界
 
@@ -237,7 +237,7 @@ cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 - **浏览器预览中无法连接 Broker 或 MCP：** 这是预期行为，请使用 Tauri 桌面应用。
 - **Broker 连接失败：** 检查 Broker 地址、端口、防火墙、MQTT 版本、认证信息及 CA 文件是否匹配。
 - **Protobuf 解析失败：** 确认 Schema 为自包含 proto3 定义，消息类型名称和字段类型正确。
-- **没有检测到更新：** 检查应用版本、Git 标签、Release 的 `latest.json` 和签名配置；当前仓库地址在首个签名 Release 发布前不会有可安装更新。
+- **没有检测到更新：** 检查应用版本、Git 标签、Release 的 `latest.json` 和签名配置；若当前 Release 尚无清单，需重跑其发布工作流或发布新版本。
 - **桌面开发加载失败：** 确认 `devUrl` 与 Vite 实际监听端口一致；目前已记录此项待修复。
 
 更多产品约束与验收标准见 [spec.md](spec.md)，下一步实施顺序见 [plan.md](plan.md)。

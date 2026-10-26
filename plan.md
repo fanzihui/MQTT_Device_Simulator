@@ -10,7 +10,7 @@
 
 **规格：** spec.md
 
-**当前状态（2026-10-26）：** 前端生产构建、Rust 编译检查和 pnpm 9.15.5 冻结锁安装均通过。浏览器预览截图已保存到 `output/playwright/project-docs/`。配置的 GitHub `latest.json` 当前返回 404，首个签名 Release 尚未完成。发现 Tauri `devUrl` 为 `1420`、Vite 开发端口为 `1430`，需在桌面验收前对齐。
+**当前状态（2026-10-26）：** 前端生产构建、Rust 编译检查和 pnpm 9.15.5 冻结锁安装均通过。浏览器预览截图已保存到 `output/playwright/project-docs/`。GitHub `latest.json` 当前返回 404；已启用 Tauri 更新签名产物，并在 Release 工作流加入资产检查，需重新运行发布工作流或发布新版本后验收。发现 Tauri `devUrl` 为 `1420`、Vite 开发端口为 `1430`，需在桌面验收前对齐。
 
 ## 全局约束
 
@@ -157,22 +157,23 @@
 - [x] 有更新时展示版本和说明，允许稍后或下载并安装；Windows 安装器负责重启。
 - [x] 注册 Tauri updater 插件并授予最小必需权限。
 - [x] 在 `v*` Release 工作流校验标签与三个版本号一致，并记录签名私钥 Secrets 要求。
-- [ ] 首个签名 Release 发布后，使用旧版 Windows 安装包完成检查、签名校验、延后、安装和重启验收。
+- [x] 开启 `bundle.createUpdaterArtifacts`，并让 Release 工作流在上传后确认 `latest.json` 与签名资产存在。
+- [ ] 重新发布带更新资产的 Release 后，使用旧版 Windows 安装包完成检查、签名校验、延后、安装和重启验收。
 
 ## 下一阶段路线图
 
-### P0：桌面启动与首个签名 Release 验收
+### P0：桌面启动与签名 Release 验收
 
 这是开始新增功能前的发布门槛。
 
 1. **统一开发端口。** 将 `src-tauri/tauri.conf.json` 的 `devUrl` 与 `package.json` 中 Vite 实际监听端口统一为 `1430`，然后确认 `pnpm tauri dev` 能启动桌面窗口。
 2. **完成 Windows 功能走查。** 使用 Windows 10/11 x64 安装包，人工验证 MQTT 3.1.1/5.0、TLS/CA、批次连接、单设备重试、重连、JSON/Protobuf 发布、QoS、主题监视、主题切换和本地数据恢复。
-3. **发布第一个带签名版本。** 确认 GitHub Secrets 与配置公钥配对；三个应用版本号一致；推送匹配的 `vX.Y.Z` 标签；确认 Release 包含 NSIS 安装包、`.sig` 和 `latest.json`。
+3. **发布带签名版本。** 确认 GitHub Secrets 与配置公钥配对；三个应用版本号一致；推送匹配的 `vX.Y.Z` 标签；确认工作流通过资产检查且 Release 包含 NSIS 安装包、`.sig` 和 `latest.json`。
 4. **完成旧版升级演练。** 从旧版启动；覆盖无更新、网络不可用、有效签名更新、稍后处理、签名无效和更新后自动重启场景。
 
-**P0 完成条件：** Windows 原生开发命令可用；MQTT/MCP 主要流程通过人工验收；首个 Release 可被旧版检查并安全安装；错误签名被拒绝；安装后能重新启动到新版本。
+**P0 完成条件：** Windows 原生开发命令可用；MQTT/MCP 主要流程通过人工验收；签名 Release 可被旧版检查并安全安装；错误签名被拒绝；安装后能重新启动到新版本。
 
-**当前阻塞：** 更新清单地址返回 404；需要先发布首个签名 Release。更新发布步骤见 [docs/releasing-updates.md](docs/releasing-updates.md)。
+**当前阻塞：** 更新清单地址仍返回 404，直到修复后的工作流重新上传当前标签或新版本的 `latest.json`。更新发布步骤见 [docs/releasing-updates.md](docs/releasing-updates.md)。
 
 ### P1：提升联调证据与配置复用
 

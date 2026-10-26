@@ -2,7 +2,7 @@
 
 | 项目 | 值 |
 | --- | --- |
-| 状态 | 核心功能与启动更新检查已实现，待 Windows 桌面端、真实 Broker 和首个签名 Release 验收 |
+| 状态 | 核心功能与启动更新检查已实现，待 Windows 桌面端、真实 Broker 和签名 Release 升级验收 |
 | 日期 | 2026-10-26 |
 | 产品 | MQTT 设备模拟器 |
 
@@ -83,10 +83,10 @@ IoT 开发人员需要在没有真实设备或批量硬件的情况下，验证 
 - Tauri 桌面应用每次启动时查询 `https://github.com/fanzihui/MQTT_Device_Simulator/releases/latest/download/latest.json`；浏览器预览不调用 updater。
 - 无更新或网络不可用时不阻止应用启动。发现更新时显示版本、当前版本和发布说明，并允许用户稍后处理。
 - 用户确认后下载并校验 updater 签名，再由 Windows NSIS 更新程序安装；安装完成后自动重启。
-- `.github/workflows/release.yml` 由 `v*` 标签触发，使用 tauri-action 生成 Windows 安装包、签名文件和 `latest.json`。
+- `src-tauri/tauri.conf.json` 设置 `bundle.createUpdaterArtifacts: true`，以生成带签名的 NSIS 更新包；`.github/workflows/release.yml` 使用 `tauri-action` 生成并上传 `latest.json` 和签名文件，上传后检查两类资产是否存在。
 - `package.json`、`src-tauri/tauri.conf.json` 和 `src-tauri/Cargo.toml` 的版本必须与 Git 标签一致；工作流会拒绝版本不匹配的 Release。
 - GitHub Secrets 必须提供与配置公钥配对的 `TAURI_SIGNING_PRIVATE_KEY`；有密码时同时设置 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`。
-- 2026-10-26 检查到配置的 `latest.json` 地址返回 404；首个签名 Release 发布前，已安装应用不会发现远端更新。
+- 2026-10-26 检查到配置的 `latest.json` 地址返回 404；修复后的工作流需重新运行或随新版本发布，更新清单才会出现在 Release 中。
 
 ### MCP 与权限
 
