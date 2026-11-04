@@ -372,6 +372,9 @@ async fn run_device_loop(
     mut event_loop: DeviceEventLoop,
 ) {
     let mut backoff = 1_u64;
+    let mut consecutive_poll_errors = 0_u32;
+    let mut connected_since: Option<tokio::time::Instant> = None;
+    let mut connection_loss_logged = false;
     loop {
         tokio::select! {
             _ = runtime.cancel.cancelled() => {
@@ -384,12 +387,40 @@ async fn run_device_loop(
             }
             event = event_loop.poll() => match event {
                 Ok(event) => {
-                    backoff = 1;
+                    if runtime.cancel.is_cancelled() {
+                        continue;
+                    }
+                    let is_connack = matches!(
+                        &event,
+                        DeviceEvent::V4(V4Event::Incoming(V4Packet::ConnAck(_)))
+                            | DeviceEvent::V5(V5Event::Incoming(V5Packet::ConnAck(_)))
+                    );
+                    if is_connack {
+                        if connected_since.map_or(true, |started| started.elapsed() >= Duration::from_secs(10)) {
+                            backoff = 1;
+                        }
+                        connected_since = Some(tokio::time::Instant::now());
+                        consecutive_poll_errors = 0;
+                        connection_loss_logged = false;
+                    }
                     process_device_event(&app, &device_id, &status, &runtime, event).await;
                 }
                 Err(error) => {
-                    set_device_state(&app, &status, "disconnected", Some(error.to_string())).await;
-                    log(&app, "warning", format!("{device_id} 连接中断，{backoff} 秒后重试。"));
+                    if runtime.cancel.is_cancelled() {
+                        continue;
+                    }
+                    consecutive_poll_errors = consecutive_poll_errors.saturating_add(1);
+                    let error = error.to_string();
+                    if !connection_loss_logged {
+                        log(&app, "warning", format!("{device_id} 连接暂时中断，{backoff} 秒后重试：{error}"));
+                        connection_loss_logged = true;
+                    }
+                    if connected_since.is_some() && consecutive_poll_errors >= 2 {
+                        let already_reconnecting = status.read().await.status == "reconnecting";
+                        if !already_reconnecting {
+                            set_device_state(&app, &status, "reconnecting", Some(error)).await;
+                        }
+                    }
                     tokio::select! {
                         _ = runtime.cancel.cancelled() => {
                             graceful_disconnect(&runtime.client, &mut event_loop).await;

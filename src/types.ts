@@ -1,6 +1,6 @@
 export type MqttVersion = '3.1.1' | '5.0'
 export type PayloadFormat = 'json' | 'protobuf'
-export type DeviceConnectionState = 'connecting' | 'connected' | 'disconnected' | 'error' | 'stopped'
+export type DeviceConnectionState = 'connecting' | 'connected' | 'reconnecting' | 'disconnected' | 'error' | 'stopped'
 
 export interface BrokerProfile {
   id: string

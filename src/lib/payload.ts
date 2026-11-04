@@ -3,7 +3,7 @@ import * as protobuf from 'protobufjs'
 export interface JsonTemplateValues {
   deviceId: string
   clientId: string
-  timestamp: string
+  timestamp: number
 }
 
 export interface ProtoFieldDescriptor {
@@ -21,7 +21,7 @@ export interface ProtoFieldDescriptor {
 
 const tokenPattern = /\{\{\s*([^{}]+?)\s*\}\}/g
 const intPattern = /^randomInt\s*:\s*(-?\d+)\s*:\s*(-?\d+)$/
-const floatPattern = /^randomFloat\s*:\s*(-?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)\s*:\s*(-?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)$/i
+const floatPattern = /^randomFloat\s*:\s*(-?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)\s*:\s*(-?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)(?:\s*:\s*([12]))?$/i
 
 export function resolveJsonTemplate(template: string, values: JsonTemplateValues): unknown {
   const resolved = template.replace(tokenPattern, (token, body: string, offset: number) => {
@@ -46,12 +46,18 @@ export function resolveJsonTemplate(template: string, values: JsonTemplateValues
       if (!Number.isFinite(minimum) || !Number.isFinite(maximum) || minimum > maximum) {
         throw new Error(`${token} 的范围无效。`)
       }
-      return String(sampleInclusiveFloat(minimum, maximum))
+      const decimalPlaces = float[3] === undefined ? undefined : Number(float[3])
+      try {
+        return String(sampleInclusiveFloat(minimum, maximum, decimalPlaces))
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : '小数范围无效。'
+        throw new Error(`${token} ${detail}`)
+      }
     }
 
     const value = values[key as keyof JsonTemplateValues]
     if (value === undefined) throw new Error(`未知的模板变量：${key}`)
-    return inString ? escapeStringContent(value) : JSON.stringify(value)
+    return inString ? escapeStringContent(String(value)) : JSON.stringify(value)
   })
 
   if (/\{\{[^{}]*\}\}/.test(resolved)) {
@@ -268,7 +274,21 @@ function normalizeEnumValues(type: protobuf.Type, value: Record<string, unknown>
   return normalized
 }
 
-export function sampleInclusiveFloat(minimum: number, maximum: number): number {
+export function sampleInclusiveFloat(minimum: number, maximum: number, decimalPlaces?: number): number {
+  if (decimalPlaces !== undefined) {
+    if (decimalPlaces !== 1 && decimalPlaces !== 2) throw new Error('小数位数只能是 1 或 2。')
+    const scale = 10 ** decimalPlaces
+    const scaledMinimum = Math.ceil(minimum * scale - 1e-10)
+    const scaledMaximum = Math.floor(maximum * scale + 1e-10)
+    if (!Number.isSafeInteger(scaledMinimum) || !Number.isSafeInteger(scaledMaximum)) {
+      throw new Error('范围过大，无法按指定小数位生成数值。')
+    }
+    if (scaledMinimum > scaledMaximum) {
+      throw new Error(`范围内没有保留 ${decimalPlaces} 位小数的可用数值。`)
+    }
+    const scaledValue = Math.floor(Math.random() * (scaledMaximum - scaledMinimum + 1)) + scaledMinimum
+    return scaledValue / scale
+  }
   if (minimum === maximum) return minimum
   return Math.min(maximum, minimum + Math.random() * (maximum - minimum) / (1 - Number.EPSILON))
 }

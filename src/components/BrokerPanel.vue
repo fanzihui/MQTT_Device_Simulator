@@ -142,9 +142,9 @@ const retryableCount = computed(() => props.devices.filter((device) => ['error',
 
         <div v-if="devices.length" class="device-list">
           <div v-for="device in devices.slice(0, 8)" :key="device.deviceId" class="device-row">
-            <span class="status-dot" :class="device.status === 'connected' ? 'is-green' : device.status === 'connecting' ? 'is-amber' : 'is-red'" />
+            <span class="status-dot" :class="device.status === 'connected' ? 'is-green' : ['connecting', 'reconnecting'].includes(device.status) ? 'is-amber' : 'is-red'" />
             <span class="device-name mono">{{ device.deviceId }}</span>
-            <span class="device-state">{{ device.status === 'connected' ? '在线' : device.status === 'connecting' ? '连接中' : device.status === 'stopped' ? '已停止' : '离线' }}</span>
+            <span class="device-state">{{ device.status === 'connected' ? '在线' : device.status === 'connecting' ? '连接中' : device.status === 'reconnecting' ? '重连中' : device.status === 'stopped' ? '已停止' : '离线' }}</span>
             <button v-if="['error', 'disconnected'].includes(device.status)" class="text-action" type="button" @click="emit('retry', device.deviceId)">重试</button>
           </div>
           <div v-if="devices.length > 8" class="more-devices">以及其他 {{ devices.length - 8 }} 台设备</div>

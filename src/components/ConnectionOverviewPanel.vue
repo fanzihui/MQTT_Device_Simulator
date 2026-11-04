@@ -11,7 +11,9 @@ const props = defineProps<{
 }>()
 
 const onlineCount = computed(() => props.devices.filter((device) => device.status === 'connected').length)
-const connectionLabel = computed(() => props.connecting ? '连接中' : onlineCount.value > 0 ? '已连接' : '未连接')
+const reconnectingCount = computed(() => props.devices.filter((device) => device.status === 'reconnecting').length)
+const connectionPending = computed(() => props.connecting || reconnectingCount.value > 0)
+const connectionLabel = computed(() => props.connecting ? '连接中' : onlineCount.value > 0 ? '已连接' : reconnectingCount.value > 0 ? '重连中' : '未连接')
 </script>
 
 <template>
@@ -22,7 +24,7 @@ const connectionLabel = computed(() => props.connecting ? '连接中' : onlineCo
         <h2 id="connection-overview-title">连接概览</h2>
         <span>{{ profile.name }}</span>
       </div>
-      <span class="overview-status" :class="{ connected: onlineCount > 0, connecting }" role="status">
+      <span class="overview-status" :class="{ connected: onlineCount > 0, connecting: connectionPending }" role="status">
         <i />{{ connectionLabel }}
       </span>
     </div>

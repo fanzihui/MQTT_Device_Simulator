@@ -21,10 +21,22 @@ const protoValues = defineModel<Record<string, unknown>>('protoValues', { requir
 const fieldRanges = defineModel<Record<string, FieldRange>>('fieldRanges', { required: true })
 
 const emit = defineEmits<{ save: [] }>()
+interface CodeEditorApi {
+  findNumericSelection: () => { from: number; to: number; text: string } | null
+  replaceRange: (from: number, to: number, text: string) => boolean
+}
+
 const dynamicVariables = ['{{deviceId}}', '{{clientId}}', '{{timestamp}}']
 const randomIntToken = '{{randomInt:min:max}}'
-const randomFloatToken = '{{randomFloat:min:max}}'
+const randomFloatTokenOne = '{{randomFloat:min:max:1}}'
+const randomFloatTokenTwo = '{{randomFloat:min:max:2}}'
 const formattingError = ref('')
+const replacementError = ref('')
+const jsonEditor = ref<CodeEditorApi | null>(null)
+const numericReplacement = ref<{ from: number; to: number; text: string } | null>(null)
+const replacementMin = ref('')
+const replacementMax = ref('')
+const replacementPrecision = ref<1 | 2>(1)
 const fillMessage = ref('')
 const isFullscreen = ref(false)
 
@@ -59,6 +71,9 @@ const fields = computed(() => {
 watch(messageTypes, (types) => {
   if (types.length && !types.includes(messageType.value)) messageType.value = types[0]!
 }, { immediate: true })
+watch(format, (nextFormat) => {
+  if (nextFormat !== 'json') closeNumericReplacement()
+})
 
 function setSchemaName(value: string) {
   if (!selectedSchema.value) return
@@ -136,11 +151,88 @@ function updateRange(field: ProtoFieldDescriptor, key: 'enabled' | 'min' | 'max'
 
 function formatJsonTemplate() {
   try {
-    jsonTemplate.value = JSON.stringify(JSON.parse(jsonTemplate.value), null, 2)
+    const tokens: Array<{ marker: string; token: string }> = []
+    const source = jsonTemplate.value
+    const masked = source.replace(/\{\{\s*[^{}]+?\s*\}\}/g, (token, offset: number) => {
+      const index = tokens.length
+      const marker = `__MQTT_TEMPLATE_TOKEN_${index}__`
+      const body = token.slice(2, -2).trim()
+      const numeric = /^random(?:Int|Float)\s*:/i.test(body)
+      const insideString = isInsideJsonString(source, offset)
+      tokens.push({ marker, token })
+      if (numeric && !insideString) return String(9_000_000_000_000 + index)
+      return insideString ? marker : JSON.stringify(marker)
+    })
+    let formatted = JSON.stringify(JSON.parse(masked), null, 2)
+    for (const { marker, token } of tokens) formatted = formatted.replaceAll(marker, token)
+    jsonTemplate.value = formatted
     formattingError.value = ''
   } catch (error) {
     formattingError.value = error instanceof Error ? error.message : 'JSON 模板格式不正确。'
   }
+}
+
+function isInsideJsonString(source: string, offset: number) {
+  let inside = false
+  let escaped = false
+  for (let index = 0; index < offset; index += 1) {
+    const character = source[index]
+    if (escaped) {
+      escaped = false
+      continue
+    }
+    if (character === '\\' && inside) {
+      escaped = true
+      continue
+    }
+    if (character === '"') inside = !inside
+  }
+  return inside
+}
+
+function openNumericReplacement() {
+  const target = jsonEditor.value?.findNumericSelection()
+  if (!target) {
+    replacementError.value = '请将光标放在一个 JSON 数值上，或先选中该数值。'
+    numericReplacement.value = null
+    return
+  }
+
+  const value = Number(target.text)
+  const decimalLength = target.text.split(/[eE]/, 1)[0]?.split('.')[1]?.length ?? 0
+  replacementPrecision.value = decimalLength >= 2 ? 2 : 1
+  replacementMin.value = String(Number((value - 1).toFixed(replacementPrecision.value)))
+  replacementMax.value = String(Number((value + 1).toFixed(replacementPrecision.value)))
+  numericReplacement.value = target
+  replacementError.value = ''
+}
+
+function closeNumericReplacement() {
+  numericReplacement.value = null
+  replacementError.value = ''
+}
+
+function applyNumericReplacement() {
+  const target = numericReplacement.value
+  if (!target) return
+  const minimum = replacementMin.value.trim() ? Number(replacementMin.value) : Number.NaN
+  const maximum = replacementMax.value.trim() ? Number(replacementMax.value) : Number.NaN
+  if (!Number.isFinite(minimum) || !Number.isFinite(maximum) || minimum > maximum) {
+    replacementError.value = '请输入有效范围，且最小值不能大于最大值。'
+    return
+  }
+  if (jsonTemplate.value.slice(target.from, target.to) !== target.text) {
+    replacementError.value = '编辑器内容已变化，请重新选择数值。'
+    return
+  }
+
+  const token = `{{randomFloat:${minimum}:${maximum}:${replacementPrecision.value}}}`
+  if (!jsonEditor.value?.replaceRange(target.from, target.to, token)) {
+    replacementError.value = '无法替换当前数值，请重新选择后再试。'
+    return
+  }
+  formattingError.value = ''
+  closeNumericReplacement()
 }
 
 function fillEmptyFields() {
@@ -211,7 +303,38 @@ onUnmounted(() => {
       <div class="toolbar-tools">
         <span class="editor-language">{{ format === 'json' ? 'JSON template' : 'proto3 schema' }}</span>
         <button v-if="format === 'json'" class="tool-button" type="button" @click="formatJsonTemplate">格式化</button>
-        <template v-else>
+        <button
+          v-if="format === 'json'"
+          class="tool-button"
+          type="button"
+          aria-haspopup="dialog"
+          :aria-expanded="Boolean(numericReplacement)"
+          title="将光标所在或选中的数值替换为随机范围变量"
+          @click="openNumericReplacement"
+        >数值替换</button>
+        <div v-if="numericReplacement" class="numeric-replacement-popover" role="dialog" aria-label="数值替换" @keydown.esc.stop.prevent="closeNumericReplacement">
+          <div class="replacement-popover-heading">
+            <strong>替换 JSON 数值</strong>
+            <button class="replacement-close" type="button" aria-label="关闭数值替换" @click="closeNumericReplacement">×</button>
+          </div>
+          <p class="replacement-target">当前数值 <code>{{ numericReplacement.text }}</code></p>
+          <div class="replacement-fields">
+            <label>最小值<input v-model="replacementMin" type="number" step="any" /></label>
+            <label>最大值<input v-model="replacementMax" type="number" step="any" /></label>
+            <label>小数位
+              <select v-model.number="replacementPrecision">
+                <option :value="1">1 位</option>
+                <option :value="2">2 位</option>
+              </select>
+            </label>
+          </div>
+          <p v-if="replacementError" class="replacement-error" role="alert">{{ replacementError }}</p>
+          <div class="replacement-actions">
+            <button class="tool-button" type="button" @click="closeNumericReplacement">取消</button>
+            <button class="tool-button replacement-apply" type="button" @click="applyNumericReplacement">替换为变量</button>
+          </div>
+        </div>
+        <template v-if="format === 'protobuf'">
           <button class="tool-button" type="button" @click="addSchema"><IconPlus aria-hidden="true" :size="15" />新建</button>
           <label class="tool-button import-button">导入 .proto<input type="file" accept=".proto,text/plain" @change="importSchema" /></label>
           <button class="tool-button save-button" type="button" @click="emit('save')"><IconDeviceFloppy aria-hidden="true" :size="15" />保存 Schema</button>
@@ -220,10 +343,11 @@ onUnmounted(() => {
     </div>
 
     <div v-if="format === 'json'" class="json-editor-shell">
-      <CodeEditor v-model="jsonTemplate" class="json-editor-host" language="json" editor-label="JSON 消息模板" />
+      <CodeEditor ref="jsonEditor" v-model="jsonTemplate" class="json-editor-host" language="json" editor-label="JSON 消息模板" />
       <div class="editor-status"><span>UTF-8</span><span>JSON</span><span class="editor-status-good">模板变量可用</span></div>
     </div>
     <p v-if="format === 'json' && formattingError" class="formatting-error">{{ formattingError }}</p>
+    <p v-if="format === 'json' && replacementError && !numericReplacement" class="formatting-error" role="alert">{{ replacementError }}</p>
 
     <div v-if="format === 'protobuf'" class="proto-workspace">
       <div class="schema-source-pane">
@@ -325,7 +449,7 @@ onUnmounted(() => {
       <IconBulb aria-hidden="true" class="help-bulb" :size="16" :stroke-width="1.8" />
       <strong>动态变量</strong>
       <code v-for="variable in dynamicVariables" :key="variable">{{ variable }}</code>
-      <span class="help-copy"><span>数值范围：</span><code class="comment-token">{{ randomIntToken }}</code><span>或</span><code class="comment-token">{{ randomFloatToken }}</code></span>
+      <span class="help-copy"><span>数值范围：</span><code class="comment-token">{{ randomIntToken }}</code><span>或</span><code class="comment-token">{{ randomFloatTokenOne }}</code><span>/</span><code class="comment-token">{{ randomFloatTokenTwo }}</code></span>
     </div>
   </section>
   </Teleport>
@@ -359,10 +483,23 @@ onUnmounted(() => {
 .format-mark { flex: 0 0 auto; }
 .json-mark { color: var(--accent); }
 .proto-mark { color: var(--accent); }
-.toolbar-tools { display: flex; align-items: center; justify-content: flex-end; gap: 6px; min-width: 0; }
+.toolbar-tools { position: relative; display: flex; align-items: center; justify-content: flex-end; gap: 6px; min-width: 0; }
 .editor-language { color: var(--subtle); font: 9px var(--font-mono); white-space: nowrap; }
 .tool-button { min-height: 30px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; border: 1px solid var(--line-strong); border-radius: 5px; padding: 0 8px; color: var(--ink-soft); background: var(--surface-raised); font-size: 10px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 .tool-button:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.numeric-replacement-popover { position: absolute; top: calc(100% + 8px); right: 0; z-index: 30; width: min(340px, calc(100vw - 44px)); border: 1px solid var(--line-strong); border-radius: 8px; padding: 12px; color: var(--ink); background: var(--surface-raised); box-shadow: 0 12px 30px rgb(0 0 0 / 22%); }
+.replacement-popover-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; }
+.replacement-close { width: 24px; height: 24px; border: 0; border-radius: 5px; color: var(--muted); background: transparent; font-size: 18px; line-height: 1; cursor: pointer; }
+.replacement-close:hover { color: var(--ink); background: var(--surface-muted); }
+.replacement-target { display: flex; align-items: center; gap: 6px; margin: 8px 0 10px; color: var(--muted); font-size: 10px; }
+.replacement-target code { color: var(--code-number); font: 10px var(--font-mono); }
+.replacement-fields { display: grid; grid-template-columns: 1fr 1fr 74px; align-items: end; gap: 8px; }
+.replacement-fields label { display: grid; gap: 5px; color: var(--muted); font-size: 10px; }
+.replacement-fields input, .replacement-fields select { width: 100%; min-width: 0; height: 31px; border: 1px solid var(--line-strong); border-radius: 5px; padding: 0 7px; color: var(--ink); background: var(--surface-input); font: 11px var(--font-mono); }
+.replacement-error { margin: 8px 0 0; color: var(--danger); font-size: 10px; }
+.replacement-actions { display: flex; justify-content: flex-end; gap: 7px; margin-top: 10px; }
+.tool-button.replacement-apply { color: #fff; border-color: var(--accent-strong); background: var(--accent-strong); }
+.tool-button.replacement-apply:hover { color: #fff; border-color: #155e75; background: #155e75; }
 .tool-button.save-button { color: #fff; border-color: var(--accent-strong); background: var(--accent-strong); }
 .tool-button.save-button:hover { color: #fff; border-color: #155e75; background: #155e75; }
 .import-button { position: relative; overflow: hidden; }

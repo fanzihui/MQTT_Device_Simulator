@@ -42,7 +42,7 @@ import {
 const defaultJsonTemplate = `{
   "deviceId": "{{deviceId}}",
   "clientId": "{{clientId}}",
-  "timestamp": "{{timestamp}}",
+  "timestamp": {{timestamp}},
   "temperature": {{randomFloat:18:28}},
   "humidity": {{randomFloat:35:65}},
   "battery": {{randomInt:70:100}},
@@ -200,6 +200,8 @@ export function useSimulator() {
   let scheduleBusy = false
   let scheduleAttempts = new Map<string, number>()
   let unlistenEvents: Array<() => void> = []
+  let deviceStatusRevision = 0
+  const deviceStatusRevisions = new Map<string, number>()
 
   function addLog(level: SystemLogEntry['level'], message: string) {
     const next: SystemLogEntry = { id: crypto.randomUUID(), timestamp: new Date().toISOString(), level, message }
@@ -449,11 +451,28 @@ export function useSimulator() {
     }
     stopSchedule()
     connecting.value = true
+    const previousDevices = devices.value
+    const startingStatusRevision = deviceStatusRevision
+    const placeholderCount = Number.isInteger(deviceBatch.value.count)
+      ? Math.max(0, Math.min(deviceBatch.value.count, 100))
+      : 0
+    devices.value = Array.from({ length: placeholderCount }, (_, index) => ({
+      deviceId: `${deviceBatch.value.deviceIdPrefix}${String(index + 1).padStart(3, '0')}`,
+      clientId: `${deviceBatch.value.clientIdPrefix}${String(index + 1).padStart(3, '0')}`,
+      status: 'connecting' as const,
+      successCount: 0,
+      failureCount: 0,
+    }))
     try {
       const statuses = await startBatch(connectionSnapshot(), deviceBatch.value)
-      devices.value = statuses
+      devices.value = statuses.map((status) => {
+        const latestRevision = deviceStatusRevisions.get(status.deviceId) ?? 0
+        const latestEventStatus = devices.value.find((device) => device.deviceId === status.deviceId)
+        return latestEventStatus && latestRevision > startingStatusRevision ? latestEventStatus : status
+      })
       if (statuses.length) addLog('info', `正在启动 ${statuses.length} 台 MQTT ${mqttVersion.value} 虚拟设备。`)
     } catch (error) {
+      if (deviceStatusRevision === startingStatusRevision) devices.value = previousDevices
       addLog('error', `启动设备失败：${errorMessage(error)}`)
     } finally {
       connecting.value = false
@@ -476,9 +495,17 @@ export function useSimulator() {
 
   async function startRetryDevice(deviceId: string) {
     const previous = devices.value.find((device) => device.deviceId === deviceId)
+    const startingStatusRevision = deviceStatusRevision
     const status = await invokeRetryDevice(deviceId)
+    const latestRevision = deviceStatusRevisions.get(deviceId) ?? 0
+    const latestEventStatus = devices.value.find((device) => device.deviceId === deviceId)
+    const current = latestEventStatus && latestRevision > startingStatusRevision ? latestEventStatus : status
     devices.value = devices.value.map((device) => device.deviceId === deviceId
-      ? { ...status, successCount: previous?.successCount ?? device.successCount, failureCount: previous?.failureCount ?? device.failureCount }
+      ? {
+          ...current,
+          successCount: Math.max(current.successCount, previous?.successCount ?? device.successCount),
+          failureCount: Math.max(current.failureCount, previous?.failureCount ?? device.failureCount),
+        }
       : device)
   }
 
@@ -547,7 +574,7 @@ export function useSimulator() {
       return value
         .replaceAll('{{deviceId}}', device.deviceId)
         .replaceAll('{{clientId}}', device.clientId)
-        .replaceAll('{{timestamp}}', String(Date.now()))
+        .replaceAll('{{timestamp}}', timestamp)
     }
     if (Array.isArray(value)) return value.map((item) => resolveProtoValue(item, device, timestamp))
     if (value && typeof value === 'object') {
@@ -607,14 +634,15 @@ export function useSimulator() {
   }
 
   function makePublishRequest(device: DeviceStatus): PublishRequest {
-    const timestamp = new Date().toISOString()
-    const topic = topicForDevice(topicTemplate.value, device, timestamp)
+    const timestampMs = Date.now()
+    const timestamp = new Date(timestampMs).toISOString()
+    const topic = topicForDevice(topicTemplate.value, device, String(timestampMs))
     if (!topic.trim()) throw new Error('发布主题不能为空。')
     if (payloadFormat.value === 'json') {
       const value = resolveJsonTemplate(jsonTemplate.value, {
         deviceId: device.deviceId,
         clientId: device.clientId,
-        timestamp,
+        timestamp: timestampMs,
       })
       const body = JSON.stringify(value)
       const bytes = new TextEncoder().encode(body)
@@ -629,7 +657,7 @@ export function useSimulator() {
       }
     }
 
-    const payload = protoPayload(device, timestamp)
+    const payload = protoPayload(device, String(timestampMs))
     return {
       deviceId: device.deviceId,
       topic,
@@ -753,6 +781,8 @@ export function useSimulator() {
     try {
       unlistenEvents = await listenToSimulatorEvents({
         onDeviceStatus: (next) => {
+          deviceStatusRevision += 1
+          deviceStatusRevisions.set(next.deviceId, deviceStatusRevision)
           devices.value = devices.value.some((device) => device.deviceId === next.deviceId)
             ? devices.value.map((device) => device.deviceId === next.deviceId
               ? {
@@ -763,6 +793,7 @@ export function useSimulator() {
               : device)
             : [...devices.value, next]
           if (next.status === 'connected') addLog('success', `${next.deviceId} 已连接。`)
+          if (next.status === 'reconnecting') addLog('warning', `${next.deviceId} 连接中断，正在自动重连。`)
           if (next.status === 'error' || next.status === 'disconnected') addLog('warning', `${next.deviceId}：${next.error || '连接中断'}`)
         },
         onPublishResult: (result) => {

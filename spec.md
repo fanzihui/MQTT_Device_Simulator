@@ -62,7 +62,7 @@ IoT 开发人员需要在没有真实设备或批量硬件的情况下，验证 
 
 ### 载荷与 Schema
 
-- JSON 模板变量为 {{deviceId}}、{{clientId}}、{{timestamp}}、{{randomInt:min:max}} 和 {{randomFloat:min:max}}。随机数变量输出数值；模板在发布前解析并校验为 JSON。
+- JSON 模板变量为 {{deviceId}}、{{clientId}}、{{timestamp}}、{{randomInt:min:max}}、{{randomFloat:min:max}}、{{randomFloat:min:max:1}} 和 {{randomFloat:min:max:2}}。{{timestamp}} 为当前 Unix 毫秒时间戳；同一消息的主题、JSON 和 Protobuf 共用该值，JSON 模板中未加引号时输出数值。随机数变量每次发布时重新抽取并输出数值；精度版本只生成范围内可表示的一位或两位小数值。模板在发布前解析并校验为 JSON；编辑器可把选中的数值替换为配置范围的变量，格式化操作保留模板变量。
 - Protobuf 使用 protobufjs 解析与编码；MQTT 线上载荷为二进制。
 - 支持自包含 proto3 Schema 的标量、枚举、嵌套、repeated 和 bytes 字段；bytes 支持 Hex 和 Base64。
 - 用户可导入、添加、编辑、校验和保存 Schema，并选择消息类型编辑字段。

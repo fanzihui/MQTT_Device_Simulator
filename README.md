@@ -132,18 +132,19 @@ src-tauri/target/release/bundle/nsis/
 | --- | --- |
 | `{{deviceId}}` | 当前虚拟设备 ID |
 | `{{clientId}}` | 当前 MQTT Client ID |
-| `{{timestamp}}` | 当前 UTC ISO 8601 时间 |
+| `{{timestamp}}` | 当前 Unix 毫秒时间戳（JSON 数值） |
 | `{{randomInt:min:max}}` | 包含上下界的随机整数 |
 | `{{randomFloat:min:max}}` | 指定范围内的随机小数 |
+| `{{randomFloat:min:max:1}}` / `{{randomFloat:min:max:2}}` | 指定范围内、最多保留 1 位或 2 位小数的随机数 |
 
-随机数占位符生成 JSON 数值，变量外不要再套引号。发布前会检查变量、范围和 JSON 结构；格式错误时不会发送消息。
+`{{timestamp}}` 在主题、JSON 和 Protobuf 中使用同一条消息生成时捕获的毫秒值；JSON 模板中不加引号时输出数值。随机数占位符也生成 JSON 数值，每次发送都会重新抽取。编辑模板时，把光标放在一个数值上或选中该数值，再点“数值替换”，即可设置范围和小数位并转换为变量；“格式化”会保留已有模板变量。发布前会检查变量、范围和 JSON 结构；格式错误时不会发送消息。
 
 ```json
 {
   "deviceId": "{{deviceId}}",
   "clientId": "{{clientId}}",
-  "timestamp": "{{timestamp}}",
-  "temperature": {{randomFloat:18:30}},
+  "timestamp": {{timestamp}},
+  "temperature": {{randomFloat:18:30:1}},
   "battery": {{randomInt:50:100}},
   "status": "online"
 }
@@ -160,7 +161,7 @@ Schema 使用自包含的 proto3 文本定义。当前支持标量、枚举、�
 - MQTT 3.1.1 和 5.0 均支持 QoS 0/1/2 与 Retain。
 - MQTT 5.0 支持 Session Expiry、Message Expiry、Response Topic、Correlation Data、Content Type 和用户属性。切换到 MQTT 3.1.1 后会隐藏 MQTT 5 专属设置。
 - 每批最多 100 台设备，每台设备单独连接；同一批共用 Broker 地址和认证信息。
-- 意外断线会按退避策略重连，间隔最多 30 秒。离线时不排队积压消息。
+- 设备连接遇到短暂网络错误时会自动重试；短暂错误不会立刻把状态闪成离线，持续失败会显示“重连中”。退避间隔为 1 至 30 秒，连接稳定后复位；离线时不积压待发消息。
 - QoS 0 没有 Broker 确认，界面标记为“未确认”；QoS 1/2 根据 Broker 确认统计结果。
 - 订阅监视器为独立客户端。每个活动面板最多保留 200 条记录，应用退出后清空。
 
