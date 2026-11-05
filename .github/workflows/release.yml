@@ -17,17 +17,17 @@ jobs:
       contents: write # 允许写入 Release
     strategy:
       fail-fast: false
+      max-parallel: 1 # 串行更新同一个 Release，避免平台并发时覆盖 latest.json。
       matrix:
         include:
           - platform: 'windows-latest'
-            args: ''
-          # 取消注释以启用 macOS 和 Linux 构建
-          # - platform: 'macos-latest'
-          #   args: '--target aarch64-apple-darwin'
-          # - platform: 'macos-latest'
-          #   args: '--target x86_64-apple-darwin'
-          # - platform: 'ubuntu-22.04'
-          #   args: ''
+            args: '--bundles nsis'
+          - platform: 'ubuntu-22.04'
+            args: '--bundles appimage,deb'
+          - platform: 'macos-latest'
+            args: '--target aarch64-apple-darwin --bundles dmg'
+          - platform: 'macos-latest'
+            args: '--target x86_64-apple-darwin --bundles dmg'
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -80,7 +80,7 @@ jobs:
         if: matrix.platform == 'ubuntu-22.04'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xdg-utils
 
       - name: validate updater signing secrets
         shell: pwsh
@@ -93,9 +93,34 @@ jobs:
           }
           Write-Host "Updater signing key detected."
 
+      - name: generate release notes for this tag
+        id: release_notes
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+        run: |
+          $headers = @{
+            Authorization = "Bearer $env:GITHUB_TOKEN"
+            Accept = "application/vnd.github+json"
+            "X-GitHub-Api-Version" = "2022-11-28"
+          }
+          $payload = @{ tag_name = $env:RELEASE_TAG } | ConvertTo-Json
+          $notes = Invoke-RestMethod -Method Post `
+            -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/generate-notes" `
+            -Headers $headers `
+            -ContentType "application/json" `
+            -Body $payload
+          if ([string]::IsNullOrWhiteSpace($notes.body)) {
+            throw "GitHub returned empty release notes for $env:RELEASE_TAG."
+          }
+          $delimiter = "release_notes_$([guid]::NewGuid().ToString('N'))"
+          $output = @("body<<$delimiter") + ($notes.body -split '\r?\n') + @($delimiter)
+          Add-Content -Path $env:GITHUB_OUTPUT -Value ($output -join "`n") -Encoding utf8
+          Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'release-notes.md') -Value $notes.body -Encoding utf8
+
       # 通过官方 tauri-action 编译并上传 updater 元数据
       - name: build and release tauri app
-        id: tauri_release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -104,35 +129,80 @@ jobs:
         with:
           tagName: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
           releaseName: MQTT_Device_Simulator ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
-          releaseBody: |
-            ## 下载建议
-
-            Windows 常规安装请下载 `MQTT_Device_Simulator_*_x64-setup.exe`。
-            `.sig` 和 `latest.json` 用于自动更新和签名校验，普通安装通常不需要手动下载。
+          releaseBody: ${{ steps.release_notes.outputs.body }}
+          generateReleaseNotes: false
           releaseDraft: false
           prerelease: false
           includeUpdaterJson: true
           args: ${{ matrix.args }}
 
-      - name: verify updater release assets
+      - name: update release description with generated notes
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_ID: ${{ steps.tauri_release.outputs.releaseId }}
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
         run: |
           $headers = @{
             Authorization = "Bearer $env:GITHUB_TOKEN"
             Accept = "application/vnd.github+json"
             "X-GitHub-Api-Version" = "2022-11-28"
           }
-          $releaseUrl = "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/$env:RELEASE_ID"
-          $release = Invoke-RestMethod -Uri $releaseUrl -Headers $headers
-          $assetNames = @($release.assets | ForEach-Object { $_.name })
-          if ($assetNames -notcontains "latest.json") {
-            throw "Release $($release.tag_name) is missing latest.json. Assets: $($assetNames -join ', ')"
+          $encodedTag = [uri]::EscapeDataString($env:RELEASE_TAG)
+          $release = Invoke-RestMethod -Method Get `
+            -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/tags/$encodedTag" `
+            -Headers $headers
+          $releaseBody = Get-Content -LiteralPath (Join-Path $env:RUNNER_TEMP 'release-notes.md') -Raw -Encoding utf8
+          $payload = @{ body = $releaseBody } | ConvertTo-Json
+          Invoke-RestMethod -Method Patch `
+            -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/releases/$($release.id)" `
+            -Headers $headers `
+            -ContentType "application/json" `
+            -Body $payload | Out-Null
+
+  verify-release:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: verify platform bundles and updater assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          release_json="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}")"
+          asset_names="$(jq -r '.assets[].name' <<< "$release_json")"
+
+          require_asset() {
+            local label="$1"
+            local pattern="$2"
+            if ! grep -Eiq "$pattern" <<< "$asset_names"; then
+              printf 'Release %s is missing %s. Assets:\n%s\n' "$RELEASE_TAG" "$label" "$asset_names" >&2
+              exit 1
+            fi
           }
-          $signatureAssets = @($assetNames | Where-Object { $_.EndsWith(".sig") })
-          if ($signatureAssets.Count -eq 0) {
-            throw "Release $($release.tag_name) is missing updater signature assets."
-          }
-          Write-Host "Verified latest.json and $($signatureAssets.Count) updater signature asset(s) for $($release.tag_name)."
+
+          require_asset 'latest.json' '^latest\.json$'
+          require_asset 'Windows NSIS installer' '-setup\.exe$'
+          require_asset 'Linux AppImage' '\.AppImage$'
+          require_asset 'Linux DEB package' '\.deb$'
+          dmg_count="$(grep -Eic '\.dmg$' <<< "$asset_names" || true)"
+          if (( dmg_count < 2 )); then
+            printf 'Release %s has %s macOS DMG package(s); expected both Apple Silicon and Intel builds. Assets:\n%s\n' "$RELEASE_TAG" "$dmg_count" "$asset_names" >&2
+            exit 1
+          fi
+
+          signature_count="$(grep -Eic '\.sig$' <<< "$asset_names" || true)"
+          if (( signature_count < 4 )); then
+            printf 'Release %s has %s updater signature asset(s); expected signatures for Windows, Linux, and both macOS architectures.\n' "$RELEASE_TAG" "$signature_count" >&2
+            exit 1
+          fi
+
+          if [[ -z "$(jq -r '.body // empty' <<< "$release_json")" ]]; then
+            printf 'Release %s has an empty body; expected generated notes for this tag.\n' "$RELEASE_TAG" >&2
+            exit 1
+          fi
+
+          printf 'Verified Windows, Linux, macOS, latest.json, %s updater signatures, and release notes for %s.\n' "$signature_count" "$RELEASE_TAG"
