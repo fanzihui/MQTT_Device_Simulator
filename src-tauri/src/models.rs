@@ -13,6 +13,8 @@ pub struct BrokerProfile {
     pub use_tls: bool,
     pub ca_cert_path: Option<String>,
     pub username: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub password: Option<String>,
     pub session_expiry_seconds: u32,
 }
 

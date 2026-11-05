@@ -127,8 +127,9 @@ function findNumericSelection() {
   return { from: candidate.from, to: candidate.to, text }
 }
 
-function replaceRange(from: number, to: number, text: string) {
+function replaceRange(from: number, to: number, expected: string, text: string) {
   if (!editorView || from < 0 || to > editorView.state.doc.length || from > to) return false
+  if (editorView.state.doc.sliceString(from, to) !== expected) return false
   editorView.dispatch({
     changes: { from, to, insert: text },
     selection: { anchor: from + text.length },

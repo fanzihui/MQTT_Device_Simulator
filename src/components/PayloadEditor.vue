@@ -23,7 +23,7 @@ const fieldRanges = defineModel<Record<string, FieldRange>>('fieldRanges', { req
 const emit = defineEmits<{ save: [] }>()
 interface CodeEditorApi {
   findNumericSelection: () => { from: number; to: number; text: string } | null
-  replaceRange: (from: number, to: number, text: string) => boolean
+  replaceRange: (from: number, to: number, expected: string, text: string) => boolean
 }
 
 const dynamicVariables = ['{{deviceId}}', '{{clientId}}', '{{timestamp}}']
@@ -221,14 +221,9 @@ function applyNumericReplacement() {
     replacementError.value = '请输入有效范围，且最小值不能大于最大值。'
     return
   }
-  if (jsonTemplate.value.slice(target.from, target.to) !== target.text) {
-    replacementError.value = '编辑器内容已变化，请重新选择数值。'
-    return
-  }
-
   const token = `{{randomFloat:${minimum}:${maximum}:${replacementPrecision.value}}}`
-  if (!jsonEditor.value?.replaceRange(target.from, target.to, token)) {
-    replacementError.value = '无法替换当前数值，请重新选择后再试。'
+  if (!jsonEditor.value?.replaceRange(target.from, target.to, target.text, token)) {
+    replacementError.value = '编辑器内容已变化，请重新选择数值。'
     return
   }
   formattingError.value = ''

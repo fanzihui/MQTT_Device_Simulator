@@ -75,8 +75,8 @@ const retryableCount = computed(() => props.devices.filter((device) => ['error',
             <input id="broker-user" v-model="profile.username" class="text-input" placeholder="username" autocomplete="off" />
           </div>
           <div class="field-block grow">
-            <label class="field-label" for="broker-password">密码 <span class="memory-label">仅本次运行</span></label>
-            <input id="broker-password" v-model="password" class="text-input" type="password" placeholder="不会保存到配置" autocomplete="new-password" />
+            <label class="field-label" for="broker-password">密码 <span class="memory-label">桌面端保存配置后保留</span></label>
+            <input id="broker-password" v-model="password" class="text-input" type="password" placeholder="保存连接配置后写入本机配置" autocomplete="new-password" />
           </div>
         </div>
 

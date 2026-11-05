@@ -152,7 +152,6 @@ export function useSimulator() {
   const profile = ref<BrokerProfile>({ ...workspace.value.profiles[0]! })
   const mqttVersion = ref<MqttVersion>(profile.value.mqttVersion)
   const password = ref('')
-  const profilePasswords = new Map<string, string>()
   const selectedScenarioId = ref(workspace.value.scenarios[0]?.id ?? '')
   const scenarioName = ref(workspace.value.scenarios[0]?.name ?? '默认遥测模拟')
   const deviceBatch = ref<DeviceBatch>({ count: 1, deviceIdPrefix: 'sensor-', clientIdPrefix: 'sim-sensor-' })
@@ -229,15 +228,13 @@ export function useSimulator() {
       ...profile.value,
       mqttVersion: mqttVersion.value,
       username: profile.value.username || null,
+      password: password.value || null,
       caCertPath: profile.value.caCertPath || null,
     }
     const profileIndex = workspace.value.profiles.findIndex((item) => item.id === currentProfile.id)
     workspace.value.profiles = profileIndex < 0
       ? [...workspace.value.profiles, currentProfile]
       : workspace.value.profiles.map((item) => item.id === currentProfile.id ? currentProfile : item)
-    if (password.value) profilePasswords.set(currentProfile.id, password.value)
-    else profilePasswords.delete(currentProfile.id)
-
     const scenario: Scenario = {
       id: selectedScenarioId.value || crypto.randomUUID(),
       name: scenarioName.value.trim() || '未命名场景',
@@ -280,10 +277,20 @@ export function useSimulator() {
   }
 
   async function savePlan(plan: SimulationPlan, passwordUpdate?: string | null) {
+    const isActiveProfile = profile.value.id === plan.profile.id
+    const isActiveScenario = selectedScenarioId.value === plan.scenario.id
+    const savedPassword = passwordUpdate === null
+      ? null
+      : typeof passwordUpdate === 'string'
+        ? passwordUpdate || null
+        : isActiveProfile
+          ? password.value || null
+          : plan.profile.password || null
     const nextProfile: BrokerProfile = {
       ...plan.profile,
       mqttVersion: plan.scenario.mqttVersion ?? plan.profile.mqttVersion,
       username: plan.profile.username || null,
+      password: savedPassword,
       caCertPath: plan.profile.caCertPath || null,
     }
     const nextScenario: Scenario = {
@@ -291,11 +298,6 @@ export function useSimulator() {
       profileId: nextProfile.id,
       mqttVersion: nextProfile.mqttVersion,
     }
-    const isActiveProfile = profile.value.id === nextProfile.id
-    const isActiveScenario = selectedScenarioId.value === nextScenario.id
-    if (passwordUpdate === null) profilePasswords.delete(nextProfile.id)
-    else if (typeof passwordUpdate === 'string' && passwordUpdate) profilePasswords.set(nextProfile.id, passwordUpdate)
-    else if (isActiveProfile && password.value) profilePasswords.set(nextProfile.id, password.value)
     if (isActiveProfile && (running.value || monitorRunning.value)) await stop()
 
     workspace.value.profiles = workspace.value.profiles.some((item) => item.id === nextProfile.id)
@@ -305,11 +307,11 @@ export function useSimulator() {
       ? workspace.value.scenarios.map((item) => item.id === nextScenario.id ? nextScenario : item)
       : [...workspace.value.scenarios, nextScenario]
 
-    if (isActiveProfile) profile.value = { ...nextProfile }
-    if (isActiveScenario) {
+    if (isActiveProfile || isActiveScenario) {
       profile.value = { ...nextProfile }
-      if (passwordUpdate !== undefined) password.value = passwordUpdate ?? ''
-      else if (!isActiveProfile) password.value = profilePasswords.get(nextProfile.id) ?? ''
+      password.value = savedPassword ?? ''
+    }
+    if (isActiveScenario) {
       applyScenario(nextScenario)
     }
     await persistWorkspace(`仿真方案“${nextScenario.name}”已保存到本机。`)
@@ -329,7 +331,6 @@ export function useSimulator() {
     const hasRelatedScenario = workspace.value.scenarios.some((item) => item.profileId === scenario.profileId)
     if (!hasRelatedScenario) {
       workspace.value.profiles = workspace.value.profiles.filter((item) => item.id !== scenario.profileId)
-      profilePasswords.delete(scenario.profileId)
     }
 
     if (wasActive) {
@@ -339,7 +340,7 @@ export function useSimulator() {
         : undefined
       if (fallbackScenario && fallbackProfile) {
         profile.value = { ...fallbackProfile }
-        password.value = ''
+        password.value = fallbackProfile.password ?? ''
         applyScenario(fallbackScenario)
       }
     }
@@ -398,7 +399,7 @@ export function useSimulator() {
     if (!selected || selected.id === profile.value.id) return
     if (running.value || monitorRunning.value) await stop()
     profile.value = { ...selected }
-    password.value = profilePasswords.get(id) ?? ''
+    password.value = selected.password ?? ''
     const scenario = workspace.value.scenarios.find((item) => item.profileId === id)
     applyScenario(scenario ?? createDefaultScenario(id, selected.mqttVersion, `draft-${crypto.randomUUID()}`))
   }
@@ -762,6 +763,7 @@ export function useSimulator() {
           }
         }
         profile.value = { ...(workspace.value.profiles[0] ?? createDefaultProfile()) }
+        password.value = profile.value.password ?? ''
         const scenario = workspace.value.scenarios.find((item) => item.profileId === profile.value.id)
         applyScenario(scenario ?? createDefaultScenario(profile.value.id, profile.value.mqttVersion, `draft-${crypto.randomUUID()}`))
         decodeSchemaId.value = workspace.value.schemas[0]?.id ?? ''

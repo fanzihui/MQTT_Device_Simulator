@@ -48,6 +48,7 @@ function newPlan() {
   const nextNumber = props.plans.length + 1
   plan.profile.id = crypto.randomUUID()
   plan.profile.name = `新连接配置 ${nextNumber}`
+  plan.profile.password = null
   plan.scenario.id = crypto.randomUUID()
   plan.scenario.name = `新仿真方案 ${nextNumber}`
   plan.scenario.profileId = plan.profile.id
@@ -316,7 +317,7 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
               </div>
               <label v-if="draft.profile.mqttVersion === '5.0'" class="plan-field full"><span>Session 过期时间 <small>秒，0 表示不保留会话</small></span><input v-model.number="draft.profile.sessionExpirySeconds" type="number" min="0" step="1" /></label>
               <label class="plan-field full"><span>用户名 <small>可选</small></span><input v-model="draft.profile.username" autocomplete="off" placeholder="匿名连接时留空" /></label>
-              <label v-if="mode === 'create' || editingActivePlan" class="plan-field full"><span>密码 <small>可选</small></span><input v-model="draftPassword" type="password" autocomplete="new-password" placeholder="仅在本次运行中保留" /></label>
+              <label v-if="mode === 'create' || editingActivePlan" class="plan-field full"><span>密码 <small>可选，桌面端保存方案后写入本机配置</small></span><input v-model="draftPassword" type="password" autocomplete="new-password" placeholder="保存方案后保留；留空可清除已保存密码" /></label>
               <label class="plan-field full"><span>CA 证书路径 <small>启用 TLS 时可选</small></span><input v-model="draft.profile.caCertPath" placeholder="证书文件路径" /></label>
               <label class="plan-toggle-row">
                 <span class="plan-toggle-copy"><strong>启用 TLS 加密</strong><small>使用安全传输连接 Broker</small></span>
@@ -328,7 +329,7 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
                 <label class="plan-field"><span>客户端 ID 前缀</span><input v-model="draft.scenario.deviceBatch.clientIdPrefix" maxlength="48" /></label>
               </div>
             </div>
-            <p v-if="mode === 'create' || editingActivePlan" class="plan-secret-note">连接密码仅保存在当前应用会话内，不会写入方案文件。</p>
+            <p v-if="mode === 'create' || editingActivePlan" class="plan-secret-note">桌面端保存方案后，密码会以明文写入本机配置文件；创建新连接时不会复制原连接密码。</p>
             <p v-if="mode === 'edit' && sharedConnectionCount > 1" class="plan-shared-note">此连接还被 {{ sharedConnectionCount - 1 }} 个仿真方案使用，保存后连接设置会同步更新。</p>
           </section>
 

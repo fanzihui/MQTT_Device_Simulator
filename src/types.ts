@@ -11,10 +11,11 @@ export interface BrokerProfile {
   useTls: boolean
   caCertPath?: string | null
   username?: string | null
+  password?: string | null
   sessionExpirySeconds: number
 }
 
-export interface BrokerConnection extends Omit<BrokerProfile, 'id' | 'name'> {
+export interface BrokerConnection extends Omit<BrokerProfile, 'id' | 'name' | 'password'> {
   password?: string | null
 }
 
