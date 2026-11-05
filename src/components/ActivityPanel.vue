@@ -233,11 +233,11 @@ onUnmounted(() => {
 .detail-heading strong { display: block; color: var(--ink-soft); font-size: 11px; font-weight: 650; }
 .decode-selects { display: flex; gap: 5px; min-width: 0; }
 .decode-selects select { max-width: 130px; height: 28px; min-width: 0; border: 1px solid var(--line-strong); border-radius: 5px; padding: 0 6px; color: var(--ink-soft); background: var(--surface-input); font-size: 10px; }
-.detail-body { min-height: 0; overflow: auto; padding: 10px 12px; }
+.detail-body { min-height: 0; flex: 1; display: flex; flex-direction: column; overflow: auto; padding: 10px 12px; }
 .detail-topic { overflow: hidden; margin-bottom: 8px; color: var(--accent); text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
 .message-metadata { display: flex; flex-wrap: wrap; gap: 5px; margin: 0 0 8px; color: var(--muted); font-size: 9px; }
 .message-metadata span { border-radius: 4px; padding: 4px 5px; background: var(--surface-raised); }
-.payload-pre { max-height: 130px; overflow: auto; margin: 0; color: var(--ink-soft); font-size: 10px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
+.payload-pre { min-height: 0; flex: 1; overflow: auto; margin: 0; color: var(--ink-soft); font-size: 10px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
 .hex-preview { display: flex; align-items: flex-start; gap: 7px; margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--line); color: var(--muted); font: 9px var(--font-mono); }
 .hex-preview code { overflow-wrap: anywhere; color: var(--ink-soft); }
 .mqtt-properties { margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--line); }
