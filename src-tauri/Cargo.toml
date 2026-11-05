@@ -1,6 +1,6 @@
 [package]
 name = "mqtt-device-simulator"
-version = "1.8.0"
+version = "2.0.0"
 description = "MQTT virtual IoT device simulator"
 authors = ["you"]
 edition = "2021"
