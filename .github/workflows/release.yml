@@ -26,7 +26,7 @@ jobs:
             args: '--bundles appimage,deb'
           - platform: 'macos-latest'
             args: '--target aarch64-apple-darwin --bundles dmg'
-          - platform: 'macos-latest'
+          - platform: 'macos-15-intel'
             args: '--target x86_64-apple-darwin --bundles dmg'
 
     runs-on: ${{ matrix.platform }}
@@ -72,8 +72,6 @@ jobs:
 
       - name: install Rust stable
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
       # 安装 Ubuntu 下的 Linux 依赖
       - name: install dependencies (ubuntu only)
