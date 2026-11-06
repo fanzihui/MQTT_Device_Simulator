@@ -1,5 +1,6 @@
 import { computed, onMounted, onUnmounted, ref, shallowRef } from 'vue'
 import type {
+  ActivityClearSelection,
   BrokerConnection,
   BrokerProfile,
   DeviceBatch,
@@ -225,6 +226,15 @@ export function useSimulator() {
       }
     }
     selectedMessageId.value = next.id
+  }
+
+  function clearActivityRecords(selection: ActivityClearSelection) {
+    const selectedMessageWasCleared = (selection.published && published.value.some((entry) => entry.id === selectedMessageId.value))
+      || (selection.received && received.value.some((entry) => entry.id === selectedMessageId.value))
+    if (selection.published) published.value = []
+    if (selection.received) received.value = []
+    if (selection.logs) logs.value = []
+    if (selectedMessageWasCleared) selectedMessageId.value = ''
   }
 
   async function saveCurrent() {
@@ -891,6 +901,7 @@ export function useSimulator() {
     stopSchedule,
     startMonitor,
     stopMonitor,
+    clearActivityRecords,
   }
 }
 

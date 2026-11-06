@@ -192,16 +192,6 @@ body.payload-fullscreen-open::before { position: fixed; inset: 0; z-index: 119; 
 body.activity-fullscreen-open { overflow: hidden; }
 body.activity-fullscreen-open::before { position: fixed; inset: 0; z-index: 119; background: rgb(2 8 11 / 76%); content: ''; }
 
-.settings-main { flex: 1; min-height: 0; overflow: auto; padding: 44px clamp(20px, 6vw, 92px); }
-.settings-intro { max-width: 760px; margin: 0 auto 28px; }
-.settings-kicker { color: var(--accent); font: 650 10px var(--font-mono); letter-spacing: .12em; }
-.settings-intro h1 { margin: 8px 0; color: var(--ink); font-size: 28px; letter-spacing: -.025em; }
-.settings-intro p { margin: 0; color: var(--muted); font-size: 14px; line-height: 1.6; }
-.settings-placeholder { max-width: 760px; min-height: 110px; display: flex; align-items: center; gap: 16px; margin: 0 auto; padding: 22px; color: var(--accent); }
-.settings-placeholder div { display: grid; gap: 5px; }
-.settings-placeholder strong { color: var(--ink); }
-.settings-placeholder span { color: var(--muted); font-size: 12px; }
-
 .mono { font-family: var(--font-mono); }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 

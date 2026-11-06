@@ -331,6 +331,7 @@ async function dismissUpdateDialog() {
           :received="simulator.received"
           :logs="simulator.logs"
           :schemas="simulator.workspace.schemas"
+          @clear-records="simulator.clearActivityRecords"
         />
       </div>
     </main>

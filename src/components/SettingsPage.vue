@@ -1,12 +1,21 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { IconCheck, IconCopy, IconDeviceDesktop, IconKey, IconMoon, IconRefresh, IconServer, IconSun } from '@tabler/icons-vue'
+import { IconBrandGithub, IconCheck, IconCopy, IconDeviceDesktop, IconExternalLink, IconInfoCircle, IconKey, IconMoon, IconRefresh, IconServer, IconSun } from '@tabler/icons-vue'
+import appIcon from '../assets/app-icon.png'
+import packageMetadata from '../../package.json'
 import { loadMcpSettings, rotateMcpToken, updateMcpSettings } from '../lib/tauri'
 import type { McpPermissions, McpSettings, ThemePreference } from '../types'
 import { useThemePreference } from '../composables/useThemePreference'
 
 const props = defineProps<{ desktopReady: boolean }>()
 const { themePreference } = useThemePreference()
+const activeSection = ref<'appearance' | 'ai' | 'about'>('appearance')
+const settingsSections = [
+  { id: 'appearance', label: '外观', description: '选择工作台显示主题。' },
+  { id: 'ai', label: 'AI', description: '配置 AI 客户端接入与工具权限。' },
+  { id: 'about', label: '关于我们', description: '查看应用信息与项目链接。' },
+] as const
+const activeSectionInfo = computed(() => settingsSections.find((section) => section.id === activeSection.value)!)
 const settings = ref<McpSettings | null>(null)
 const tokenVisible = ref(false)
 const loading = ref(true)
@@ -108,32 +117,51 @@ function errorText(error: unknown) {
 
 <template>
   <main class="settings-main">
-    <div class="settings-intro">
-      <span class="settings-kicker">PREFERENCES</span>
-      <h1>设置</h1>
-      <p>调整工作台外观，并按需开放本机 MCP 能力给 Codex 等 AI 客户端。</p>
-    </div>
+    <div class="settings-layout">
+      <nav class="settings-nav" aria-label="设置导航">
+        <button
+          v-for="section in settingsSections"
+          :key="section.id"
+          class="settings-nav-item"
+          :class="{ active: activeSection === section.id }"
+          type="button"
+          :aria-current="activeSection === section.id ? 'page' : undefined"
+          @click="activeSection = section.id"
+        >
+          <IconSun v-if="section.id === 'appearance'" aria-hidden="true" :size="16" />
+          <IconServer v-else-if="section.id === 'ai'" aria-hidden="true" :size="16" />
+          <IconInfoCircle v-else aria-hidden="true" :size="16" />
+          {{ section.label }}
+        </button>
+      </nav>
 
-    <section class="settings-section panel-card">
-      <div class="settings-section-heading">
-        <div class="settings-icon"><IconSun :size="18" aria-hidden="true" /></div>
-        <div><h2>外观</h2><p>选择工作台显示主题</p></div>
-      </div>
-      <div class="theme-options" role="radiogroup" aria-label="应用主题">
-        <label v-for="choice in themeChoices" :key="choice.value" class="theme-option" :class="{ selected: themePreference === choice.value }">
-          <input v-model="themePreference" type="radio" name="theme" :value="choice.value" />
-          <span class="theme-option-icon">
-            <IconMoon v-if="choice.value === 'dark'" :size="17" aria-hidden="true" />
-            <IconSun v-else-if="choice.value === 'light'" :size="17" aria-hidden="true" />
-            <IconDeviceDesktop v-else :size="17" aria-hidden="true" />
-          </span>
-          <span class="theme-option-copy"><strong>{{ choice.label }}</strong><small>{{ choice.description }}</small></span>
-          <IconCheck v-if="themePreference === choice.value" class="theme-check" :size="16" aria-hidden="true" />
-        </label>
-      </div>
-    </section>
+      <div class="settings-content">
+        <header class="settings-intro">
+          <span class="settings-kicker">PREFERENCES</span>
+          <h1>{{ activeSectionInfo.label }}</h1>
+          <p>{{ activeSectionInfo.description }}</p>
+        </header>
 
-    <section class="settings-section mcp-settings-card panel-card">
+        <section v-if="activeSection === 'appearance'" class="settings-section panel-card">
+          <div class="settings-section-heading">
+            <div class="settings-icon"><IconSun :size="18" aria-hidden="true" /></div>
+            <div><h2>显示主题</h2><p>选择工作台显示主题</p></div>
+          </div>
+          <div class="theme-options" role="radiogroup" aria-label="应用主题">
+            <label v-for="choice in themeChoices" :key="choice.value" class="theme-option" :class="{ selected: themePreference === choice.value }">
+              <input v-model="themePreference" type="radio" name="theme" :value="choice.value" />
+              <span class="theme-option-icon">
+                <IconMoon v-if="choice.value === 'dark'" :size="17" aria-hidden="true" />
+                <IconSun v-else-if="choice.value === 'light'" :size="17" aria-hidden="true" />
+                <IconDeviceDesktop v-else :size="17" aria-hidden="true" />
+              </span>
+              <span class="theme-option-copy"><strong>{{ choice.label }}</strong><small>{{ choice.description }}</small></span>
+              <IconCheck v-if="themePreference === choice.value" class="theme-check" :size="16" aria-hidden="true" />
+            </label>
+          </div>
+        </section>
+
+        <section v-else-if="activeSection === 'ai'" class="settings-section mcp-settings-card panel-card">
       <div class="settings-section-heading mcp-heading">
         <div class="settings-icon"><IconServer :size="18" aria-hidden="true" /></div>
         <div class="mcp-heading-copy"><h2>AI 工具连接（MCP）</h2><p>运行期间在本机提供受令牌保护的 HTTP MCP 服务。</p></div>
@@ -183,18 +211,43 @@ function errorText(error: unknown) {
 
       <p v-if="feedback" class="settings-feedback" role="status" aria-live="polite">{{ feedback }}</p>
       <p v-if="loadError && settings" class="settings-error" role="alert">{{ loadError }}</p>
-    </section>
+        </section>
+
+        <section v-else class="about-section">
+          <article class="about-hero panel-card">
+            <img :src="appIcon" alt="" />
+            <div class="about-copy">
+              <span class="about-kicker">MQTT DEVICE SIMULATOR</span>
+              <h2>Telemetry Studio</h2>
+              <p>面向 IoT 开发与联调的 MQTT 桌面工作台，集中管理 Broker、虚拟设备、消息发布和订阅记录。</p>
+            </div>
+            <div class="about-version"><small>当前版本</small><code>v{{ packageMetadata.version }}</code></div>
+          </article>
+
+          <a class="about-project-link panel-card" href="https://github.com/fanzihui/MQTT_Device_Simulator" target="_blank" rel="noreferrer">
+            <div class="about-project-icon"><IconBrandGithub aria-hidden="true" :size="18" /></div>
+            <span><strong>开源项目</strong><small>查看源码、版本更新与项目说明</small></span>
+            <IconExternalLink class="about-project-arrow" aria-hidden="true" :size="16" />
+          </a>
+        </section>
+      </div>
+    </div>
   </main>
 </template>
 
 <style scoped>
-.settings-main { flex: 1; min-height: 0; overflow: auto; padding: 40px clamp(18px, 5vw, 76px); }
-.settings-intro, .settings-section { width: min(100%, 860px); margin-right: auto; margin-left: auto; }
+.settings-main { flex: 1; min-height: 0; overflow: auto; padding: 30px clamp(16px, 3vw, 48px); }
+.settings-layout { width: min(100%, 1280px); min-height: 100%; display: grid; grid-template-columns: 178px minmax(0, 1fr); align-content: start; gap: clamp(22px, 3vw, 42px); margin: 0 auto; }
+.settings-nav { position: sticky; top: 0; display: flex; flex-direction: column; gap: 4px; height: max-content; border-right: 1px solid var(--line); padding: 1px 14px 0 0; }
+.settings-nav-item { min-height: 36px; display: flex; align-items: center; gap: 9px; border: 1px solid transparent; border-radius: 7px; padding: 0 10px; color: var(--muted); background: transparent; font-size: 11px; font-weight: 550; text-align: left; cursor: pointer; transition: color .14s ease, background .14s ease; }
+.settings-nav-item:hover { color: var(--ink); background: var(--surface-raised); }
+.settings-nav-item.active { border-color: color-mix(in srgb, var(--accent) 24%, transparent); color: var(--accent); background: var(--accent-soft); font-weight: 650; }
+.settings-content { width: min(100%, 1000px); min-width: 0; }
 .settings-intro { margin-bottom: 22px; }
 .settings-kicker { color: var(--accent); font: 650 10px var(--font-mono); letter-spacing: .12em; }
 .settings-intro h1 { margin: 8px 0 6px; color: var(--ink); font-size: 27px; letter-spacing: -.025em; }
 .settings-intro p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
-.settings-section { margin-bottom: 14px; padding: 18px; }
+.settings-section { margin: 0; padding: 18px; }
 .settings-section-heading { display: flex; align-items: center; gap: 11px; margin-bottom: 16px; }
 .settings-icon { width: 34px; height: 34px; display: grid; flex: 0 0 34px; place-items: center; border: 1px solid var(--line); border-radius: 8px; color: var(--accent); background: var(--accent-soft); }
 .settings-section-heading h2 { margin: 0; color: var(--ink); font-size: 14px; }
@@ -260,9 +313,30 @@ function errorText(error: unknown) {
 .env-command-row { display: flex; align-items: center; justify-content: space-between; gap: 9px; margin-top: 7px; border: 1px solid var(--line); border-radius: 7px; padding: 7px 8px; background: var(--surface-muted); }
 .env-command-row code { min-width: 0; overflow-x: auto; color: var(--muted); white-space: nowrap; font: 9px var(--font-mono); }
 .settings-feedback { margin: 12px 0 0; color: var(--green); font-size: 10px; }
+.about-section { display: grid; gap: 11px; }
+.about-hero { min-width: 0; display: flex; align-items: center; gap: 14px; padding: 19px; }
+.about-hero > img { width: 52px; height: 52px; flex: 0 0 52px; border: 1px solid var(--line); border-radius: 12px; }
+.about-copy { min-width: 0; }
+.about-kicker { color: var(--accent); font: 650 9px var(--font-mono); letter-spacing: .1em; }
+.about-copy h2 { margin: 5px 0; color: var(--ink); font-size: 17px; }
+.about-copy p { max-width: 620px; margin: 0; color: var(--muted); font-size: 10px; line-height: 1.55; }
+.about-version { display: grid; gap: 4px; margin-left: auto; padding-left: 12px; text-align: right; }
+.about-version small { color: var(--muted); font-size: 9px; }
+.about-version code { color: var(--ink-soft); font: 10px var(--font-mono); }
+.about-project-link { min-height: 66px; display: flex; align-items: center; gap: 10px; border: 1px solid var(--line); border-radius: 9px; padding: 11px 13px; color: inherit; text-decoration: none; transition: border-color .14s ease, background .14s ease; }
+.about-project-link:hover { border-color: var(--accent); background: var(--surface-raised); }
+.about-project-icon { width: 32px; height: 32px; display: grid; flex: 0 0 32px; place-items: center; border-radius: 7px; color: var(--accent); background: var(--accent-soft); }
+.about-project-link > span { min-width: 0; display: grid; gap: 4px; }
+.about-project-link strong { color: var(--ink-soft); font-size: 11px; }
+.about-project-link small { color: var(--muted); font-size: 9px; }
+.about-project-arrow { margin-left: auto; color: var(--muted); }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 @media (max-width: 640px) {
-  .settings-main { padding: 22px 12px; }
+  .settings-main { padding: 20px 12px; }
+  .settings-layout { grid-template-columns: minmax(0, 1fr); gap: 17px; }
+  .settings-nav { position: static; flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 8px; }
+  .settings-nav-item { flex: 1 0 auto; justify-content: center; padding-inline: 9px; }
+  .settings-content { width: 100%; }
   .settings-section { padding: 13px; }
   .theme-options { grid-template-columns: minmax(0, 1fr); }
   .theme-option { min-height: 62px; }
@@ -272,5 +346,7 @@ function errorText(error: unknown) {
   .permission-heading { align-items: flex-start; flex-direction: column; gap: 5px; }
   .config-heading { align-items: flex-start; }
   .env-command-row { align-items: flex-start; flex-direction: column; }
+  .about-hero { flex-wrap: wrap; padding: 14px; }
+  .about-version { margin-left: 66px; padding-left: 0; text-align: left; }
 }
 </style>

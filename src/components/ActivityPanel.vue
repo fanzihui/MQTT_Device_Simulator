@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { IconActivity, IconArrowDownLeft, IconArrowUpRight, IconListDetails, IconMaximize, IconMinimize } from '@tabler/icons-vue'
-import type { MessageEntry, ProtoSchemaEntry, SystemLogEntry } from '../types'
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
+import { IconActivity, IconArrowDownLeft, IconArrowUpRight, IconListDetails, IconMaximize, IconMinimize, IconTrash, IconX } from '@tabler/icons-vue'
+import type { ActivityClearSelection, MessageEntry, ProtoSchemaEntry, SystemLogEntry } from '../types'
 import { bytesFromHex, decodeProtoMessage, listProtoMessageTypes, parseProtoSchema } from '../lib/payload'
 
 const tab = defineModel<'published' | 'received' | 'logs'>('tab', { required: true })
@@ -17,7 +17,18 @@ const props = defineProps<{
 
 const selectedMessageId = defineModel<string>('selectedMessageId', { required: true })
 const isFullscreen = ref(false)
+const clearDialogOpen = ref(false)
+const clearSelection = ref({ published: false, received: false, logs: false })
+const clearDialogElement = ref<HTMLElement | null>(null)
+const clearRecordsButtonElement = ref<HTMLButtonElement | null>(null)
+const emit = defineEmits<{ clearRecords: [selection: ActivityClearSelection] }>()
 const selectedMessage = computed(() => [...props.published, ...props.received].find((entry) => entry.id === selectedMessageId.value))
+const clearOptions = computed(() => [
+  { key: 'published' as const, label: '已发送', count: props.published.length },
+  { key: 'received' as const, label: '已接收', count: props.received.length },
+  { key: 'logs' as const, label: '系统日志', count: props.logs.length },
+])
+const hasClearSelection = computed(() => Object.values(clearSelection.value).some(Boolean))
 const selectedFormatLabel = computed(() => {
   const message = selectedMessage.value
   if (!message) return ''
@@ -72,9 +83,48 @@ function toggleFullscreen() {
   document.body.classList.toggle('activity-fullscreen-open', isFullscreen.value)
 }
 
-function handleFullscreenKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape' && isFullscreen.value) toggleFullscreen()
+function openClearDialog() {
+  clearSelection.value = { published: false, received: false, logs: false }
+  clearDialogOpen.value = true
 }
+
+function closeClearDialog() {
+  clearDialogOpen.value = false
+  void nextTick(() => clearRecordsButtonElement.value?.focus())
+}
+
+function clearSelectedRecords() {
+  if (!hasClearSelection.value) return
+  emit('clearRecords', { ...clearSelection.value })
+  closeClearDialog()
+}
+
+function handleClearDialogKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Tab') return
+  const focusable = clearDialogElement.value?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled)')
+  if (!focusable?.length) return
+  const first = focusable[0]!
+  const last = focusable[focusable.length - 1]!
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault()
+    first.focus()
+  }
+}
+
+function handleFullscreenKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Escape') return
+  if (clearDialogOpen.value) closeClearDialog()
+  else if (isFullscreen.value) toggleFullscreen()
+}
+
+watch(clearDialogOpen, async (open) => {
+  if (!open) return
+  await nextTick()
+  clearDialogElement.value?.querySelector<HTMLElement>('button:not(:disabled)')?.focus()
+})
 
 onMounted(() => window.addEventListener('keydown', handleFullscreenKeydown))
 onUnmounted(() => {
@@ -97,11 +147,17 @@ onUnmounted(() => {
         <button :class="{ active: tab === 'logs' }" type="button" @click="tab = 'logs'">系统日志 <span>{{ logs.length }}</span></button>
       </div>
       <div class="activity-cap">最多保留 200 条</div>
-      <button class="activity-fullscreen-button" type="button" :aria-label="isFullscreen ? '退出消息记录全屏' : '全屏查看消息记录'" :title="isFullscreen ? '退出全屏' : '全屏查看'" @click="toggleFullscreen">
-        <IconMinimize v-if="isFullscreen" aria-hidden="true" :size="16" />
-        <IconMaximize v-else aria-hidden="true" :size="16" />
-        <span>{{ isFullscreen ? '退出全屏' : '全屏' }}</span>
-      </button>
+      <div class="activity-header-actions">
+        <button ref="clearRecordsButtonElement" class="activity-clear-button" type="button" aria-label="清空记录" title="选择要清空的记录" @click="openClearDialog">
+          <IconTrash aria-hidden="true" :size="15" />
+          <span>清空记录</span>
+        </button>
+        <button class="activity-fullscreen-button" type="button" :aria-label="isFullscreen ? '退出消息记录全屏' : '全屏查看消息记录'" :title="isFullscreen ? '退出全屏' : '全屏查看'" @click="toggleFullscreen">
+          <IconMinimize v-if="isFullscreen" aria-hidden="true" :size="16" />
+          <IconMaximize v-else aria-hidden="true" :size="16" />
+          <span>{{ isFullscreen ? '退出全屏' : '全屏' }}</span>
+        </button>
+      </div>
     </div>
 
     <div v-if="tab !== 'logs'" class="activity-content">
@@ -172,17 +228,48 @@ onUnmounted(() => {
     </div>
   </section>
   </Teleport>
+
+  <Teleport to="body">
+    <div v-if="clearDialogOpen" class="dialog-backdrop activity-clear-backdrop" role="presentation" @click.self="closeClearDialog">
+      <section ref="clearDialogElement" class="dialog-surface clear-record-dialog" role="dialog" aria-modal="true" aria-labelledby="clear-record-title" @keydown="handleClearDialogKeydown">
+        <header class="clear-dialog-heading">
+          <div class="clear-dialog-icon"><IconTrash aria-hidden="true" :size="18" /></div>
+          <div>
+            <h2 id="clear-record-title">清空消息记录</h2>
+            <p>选择要清除的记录类型和范围。</p>
+          </div>
+          <button class="clear-dialog-close" type="button" aria-label="关闭清空记录" @click="closeClearDialog"><IconX aria-hidden="true" :size="17" /></button>
+        </header>
+
+        <fieldset class="clear-record-options">
+          <legend class="sr-only">选择要清空的记录类型</legend>
+          <label v-for="option in clearOptions" :key="option.key" class="clear-record-option" :class="{ unavailable: option.count === 0 }">
+            <input v-model="clearSelection[option.key]" type="checkbox" :disabled="option.count === 0" />
+            <span>{{ option.label }}</span>
+            <small>{{ option.count }} 条</small>
+          </label>
+        </fieldset>
+
+        <p class="clear-dialog-note">清空后无法恢复。此操作只影响当前运行期间的记录。</p>
+        <footer class="clear-dialog-actions">
+          <button class="clear-cancel-button" type="button" @click="closeClearDialog">取消</button>
+          <button class="clear-confirm-button" type="button" :disabled="!hasClearSelection" @click="clearSelectedRecords">清空所选记录</button>
+        </footer>
+      </section>
+    </div>
+  </Teleport>
 </template>
 
 <style scoped>
 .activity-card { min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 .activity-card.is-fullscreen { position: fixed; inset: 14px; z-index: 120; width: auto; height: auto; min-height: 0; max-height: none; overflow: hidden; border-color: var(--line-strong); border-radius: 12px; box-shadow: 0 24px 90px #0008; }
-.activity-card:not(.is-fullscreen) .activity-topbar { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "title action" "tabs tabs"; align-items: center; gap: 6px 10px; padding: 10px 12px 0; }
+.activity-card:not(.is-fullscreen) .activity-topbar { min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "title actions" "tabs tabs"; align-items: center; gap: 6px 10px; padding: 10px 12px 0; }
 .activity-card:not(.is-fullscreen) .activity-title { grid-area: title; min-width: 0; }
 .activity-card:not(.is-fullscreen) .activity-tabs { grid-area: tabs; width: 100%; min-width: 0; height: 38px; justify-content: space-between; gap: 8px; margin: 0; }
 .activity-card:not(.is-fullscreen) .activity-cap { display: none; }
-.activity-card:not(.is-fullscreen) .activity-fullscreen-button { grid-area: action; margin-left: 0; }
+.activity-card:not(.is-fullscreen) .activity-header-actions { grid-area: actions; margin-left: 0; }
 .activity-topbar { min-height: 62px; display: flex; align-items: center; gap: 18px; padding: 0 18px; border-bottom: 1px solid var(--line); }
+.activity-header-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 6px; margin-left: auto; }
 .activity-title { display: flex; align-items: center; gap: 9px; flex: 0 0 auto; }
 .activity-icon { width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 7px; color: var(--accent); background: var(--accent-soft); }
 .activity-title h2 { margin: 0; color: var(--ink); font-size: 13px; font-weight: 700; }
@@ -195,7 +282,10 @@ onUnmounted(() => {
 .activity-tabs button span { min-width: 19px; padding: 3px 5px; border-radius: 4px; color: var(--muted); background: var(--surface-raised); font: 10px var(--font-mono); text-align: center; }
 .activity-tabs button.active span { color: var(--accent); background: var(--accent-soft); }
 .activity-cap { color: var(--subtle); font-size: 10px; white-space: nowrap; }
-.activity-fullscreen-button { min-height: 31px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; margin-left: 2px; border: 1px solid var(--line-strong); border-radius: 6px; padding: 0 8px; color: var(--ink-soft); background: var(--surface-raised); font-size: 10px; font-weight: 650; white-space: nowrap; cursor: pointer; }
+.activity-clear-button, .activity-fullscreen-button { min-height: 31px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; border: 1px solid var(--line-strong); border-radius: 6px; padding: 0 8px; color: var(--ink-soft); background: var(--surface-raised); font-size: 10px; font-weight: 650; white-space: nowrap; cursor: pointer; }
+.activity-clear-button { color: var(--danger); }
+.activity-clear-button:hover { border-color: var(--danger); background: var(--danger-soft); }
+.activity-fullscreen-button { margin-left: 0; }
 .activity-fullscreen-button:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
 .activity-content { flex: 1; min-width: 0; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(180px, .9fr) minmax(180px, 1.1fr); }
 .activity-content > * { min-width: 0; }
@@ -265,6 +355,27 @@ onUnmounted(() => {
 .activity-card.is-fullscreen .message-row { min-height: 46px; }
 .activity-card.is-fullscreen .log-row { min-height: 42px; align-items: start; padding-block: 9px; }
 .activity-card.is-fullscreen .log-message { overflow: visible; overflow-wrap: anywhere; text-overflow: clip; white-space: normal; line-height: 1.55; }
+.activity-clear-backdrop { z-index: 220; }
+.clear-record-dialog { width: min(440px, 100%); padding: 20px; }
+.clear-dialog-heading { display: flex; align-items: center; gap: 11px; }
+.clear-dialog-icon { width: 36px; height: 36px; display: grid; flex: 0 0 36px; place-items: center; border-radius: 9px; color: var(--danger); background: var(--danger-soft); }
+.clear-dialog-heading h2 { margin: 0; color: var(--ink); font-size: 15px; }
+.clear-dialog-heading p { margin: 4px 0 0; color: var(--muted); font-size: 10px; }
+.clear-dialog-close { width: 30px; height: 30px; display: grid; flex: 0 0 30px; place-items: center; margin-left: auto; border: 1px solid transparent; border-radius: 7px; color: var(--muted); background: transparent; cursor: pointer; }
+.clear-dialog-close:hover { color: var(--ink); border-color: var(--line); background: var(--surface-raised); }
+.clear-record-options { display: grid; gap: 7px; margin: 17px 0 0; border: 0; padding: 0; }
+.clear-record-option { min-height: 43px; display: flex; align-items: center; gap: 9px; border: 1px solid var(--line); border-radius: 7px; padding: 0 10px; color: var(--ink-soft); background: var(--surface-muted); font-size: 11px; cursor: pointer; }
+.clear-record-option:has(input:checked) { border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); background: var(--danger-soft); }
+.clear-record-option input { width: 15px; height: 15px; flex: 0 0 auto; accent-color: var(--danger); }
+.clear-record-option small { margin-left: auto; color: var(--muted); font: 10px var(--font-mono); }
+.clear-record-option.unavailable { opacity: .55; cursor: not-allowed; }
+.clear-dialog-note { margin: 12px 0 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.clear-dialog-actions { display: flex; justify-content: flex-end; gap: 7px; margin-top: 18px; }
+.clear-dialog-actions button { min-height: 32px; border: 1px solid var(--line-strong); border-radius: 6px; padding: 0 10px; font-size: 10px; font-weight: 650; cursor: pointer; }
+.clear-cancel-button { color: var(--ink-soft); background: var(--surface-raised); }
+.clear-confirm-button { border-color: var(--danger) !important; color: #fff; background: var(--danger); }
+.clear-confirm-button:hover:not(:disabled) { filter: brightness(.92); }
+.clear-confirm-button:disabled { opacity: .5; cursor: not-allowed; }
 @media (max-width: 1120px) {
   .activity-card { min-height: 372px; }
   .activity-card:not(.is-fullscreen) .activity-content { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(150px, auto) minmax(160px, 230px); }
@@ -274,9 +385,10 @@ onUnmounted(() => {
 @media (max-width: 680px) {
   .activity-topbar { flex-wrap: wrap; gap: 0 10px; padding: 8px 10px 0; }
   .activity-title { min-height: 38px; }
+  .activity-header-actions { margin-left: auto; }
   .activity-tabs { width: 100%; height: 38px; justify-content: space-between; gap: 8px; margin: 0; }
   .activity-cap { display: none; }
-  .activity-fullscreen-button { margin-left: auto; }
+  .activity-fullscreen-button { margin-left: 0; }
   .activity-card.is-fullscreen { inset: 6px; }
   .activity-card.is-fullscreen .activity-topbar { gap: 0 10px; padding: 8px 10px 0; }
   .activity-card.is-fullscreen .activity-content { grid-template-rows: minmax(200px, .9fr) minmax(220px, 1.1fr); }
