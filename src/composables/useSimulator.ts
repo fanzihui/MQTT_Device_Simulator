@@ -48,6 +48,7 @@ const defaultJsonTemplate = `{
   "battery": {{randomInt:70:100}},
   "status": "online"
 }`
+const defaultTopicTemplate = 'sensors/{{deviceId}}/telemetry'
 
 const defaultProtoSource = `syntax = "proto3";
 
@@ -99,7 +100,7 @@ function createDefaultProfile(): BrokerProfile {
 function createDefaultWorkspace(): WorkspaceData {
   const profile = createDefaultProfile()
   const scenario = createDefaultScenario(profile.id, profile.mqttVersion, 'scenario-default')
-  return { version: 1, profiles: [profile], schemas: [defaultSchema], scenarios: [scenario] }
+  return { version: 2, profiles: [profile], schemas: [defaultSchema], scenarios: [scenario], messageTemplates: [] }
 }
 
 function defaultFieldRanges(): Record<string, FieldRange> {
@@ -116,7 +117,7 @@ function createDefaultScenario(profileId: string, mqttVersion: MqttVersion, id =
     profileId,
     mqttVersion,
     deviceBatch: { count: 1, deviceIdPrefix: 'sensor-', clientIdPrefix: 'sim-sensor-' },
-    topicTemplate: 'sensors/{{deviceId}}/telemetry',
+    topicTemplate: defaultTopicTemplate,
     payloadFormat: 'json',
     jsonTemplate: defaultJsonTemplate,
     schemaId: defaultSchema.id,
@@ -155,7 +156,7 @@ export function useSimulator() {
   const selectedScenarioId = ref(workspace.value.scenarios[0]?.id ?? '')
   const scenarioName = ref(workspace.value.scenarios[0]?.name ?? '默认遥测模拟')
   const deviceBatch = ref<DeviceBatch>({ count: 1, deviceIdPrefix: 'sensor-', clientIdPrefix: 'sim-sensor-' })
-  const topicTemplate = ref('sensors/{{deviceId}}/telemetry')
+  const topicTemplate = ref(defaultTopicTemplate)
   const payloadFormat = ref<PayloadFormat>('json')
   const jsonTemplate = ref(defaultJsonTemplate)
   const selectedSchemaId = ref(defaultSchema.id)
@@ -183,6 +184,9 @@ export function useSimulator() {
   const scheduleRunning = ref(false)
   const monitorRunning = ref(false)
   const workspaceReady = ref(false)
+  const savedScenario = computed(() => workspace.value.scenarios.find((scenario) => scenario.id === selectedScenarioId.value))
+  const savedTopicTemplate = computed(() => savedScenario.value?.topicTemplate ?? defaultTopicTemplate)
+  const savedJsonTemplate = computed(() => savedScenario.value?.jsonTemplate ?? defaultJsonTemplate)
   const profileMenuId = computed(() => profile.value.id)
   const profileScenarios = computed(() => workspace.value.scenarios.filter((scenario) => scenario.profileId === profile.value.id))
   const simulationPlans = computed<SimulationPlan[]>(() => workspace.value.scenarios.flatMap((scenario) => {
@@ -263,7 +267,7 @@ export function useSimulator() {
   }
 
   async function persistWorkspace(successMessage: string) {
-    workspace.value.version = 1
+    workspace.value.version = 2
     if (isDesktopApp()) {
       try {
         await saveWorkspace(workspace.value)
@@ -274,6 +278,10 @@ export function useSimulator() {
     } else {
       addLog('info', '当前为浏览器预览，配置暂存于页面内存。')
     }
+  }
+
+  async function saveMessageTemplates() {
+    await persistWorkspace('消息模板已保存到本机。')
   }
 
   async function savePlan(plan: SimulationPlan, passwordUpdate?: string | null) {
@@ -857,6 +865,8 @@ export function useSimulator() {
     scheduleRunning,
     monitorRunning,
     workspaceReady,
+    savedTopicTemplate,
+    savedJsonTemplate,
     profileMenuId,
     running,
     onlineDevices,
@@ -864,6 +874,7 @@ export function useSimulator() {
     failureCount,
     isDesktopApp,
     saveCurrent,
+    saveMessageTemplates,
     savePlan,
     deletePlan,
     selectPlan,

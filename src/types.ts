@@ -32,6 +32,13 @@ export interface ProtoSchemaEntry {
   messageType: string
 }
 
+export interface MessageTemplate {
+  id: string
+  name: string
+  topicTemplate: string
+  jsonTemplate: string
+}
+
 export interface Scenario {
   id: string
   name: string
@@ -69,6 +76,7 @@ export interface WorkspaceData {
   profiles: BrokerProfile[]
   schemas: ProtoSchemaEntry[]
   scenarios: Scenario[]
+  messageTemplates: MessageTemplate[]
 }
 
 export interface DeviceStatus {

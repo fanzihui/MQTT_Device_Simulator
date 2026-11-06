@@ -290,12 +290,17 @@ async function dismissUpdateDialog() {
             v-model:format="simulator.payloadFormat"
             v-model:topic-template="simulator.topicTemplate"
             v-model:json-template="simulator.jsonTemplate"
+            v-model:message-templates="simulator.workspace.messageTemplates"
             v-model:schemas="simulator.workspace.schemas"
             v-model:schema-id="simulator.selectedSchemaId"
             v-model:message-type="simulator.messageType"
             v-model:proto-values="simulator.protoValues"
             v-model:field-ranges="simulator.fieldRanges"
+            :workspace-ready="simulator.workspaceReady"
+            :saved-topic-template="simulator.savedTopicTemplate"
+            :saved-json-template="simulator.savedJsonTemplate"
             @save="simulator.saveCurrent"
+            @save-templates="simulator.saveMessageTemplates"
           />
 
           <PublishPanel

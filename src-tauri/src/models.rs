@@ -37,6 +37,15 @@ pub struct ProtoSchemaEntry {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct MessageTemplate {
+    pub id: String,
+    pub name: String,
+    pub topic_template: String,
+    pub json_template: String,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct Scenario {
     pub id: String,
     pub name: String,
@@ -75,15 +84,18 @@ pub struct WorkspaceData {
     pub profiles: Vec<BrokerProfile>,
     pub schemas: Vec<ProtoSchemaEntry>,
     pub scenarios: Vec<Scenario>,
+    #[serde(default)]
+    pub message_templates: Vec<MessageTemplate>,
 }
 
 impl Default for WorkspaceData {
     fn default() -> Self {
         Self {
-            version: 1,
+            version: 2,
             profiles: Vec::new(),
             schemas: Vec::new(),
             scenarios: Vec::new(),
+            message_templates: Vec::new(),
         }
     }
 }

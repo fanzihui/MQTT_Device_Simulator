@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { IconBraces, IconBulb, IconDeviceFloppy, IconFileCode, IconMaximize, IconMinimize, IconPlus, IconSchema, IconSparkles } from '@tabler/icons-vue'
 import CodeEditor from './CodeEditor.vue'
-import type { FieldRange, ProtoSchemaEntry, PayloadFormat } from '../types'
+import type { FieldRange, MessageTemplate, ProtoSchemaEntry, PayloadFormat } from '../types'
 import {
   getMessageFields,
   fillEmptyProtoValues,
@@ -11,16 +11,23 @@ import {
   type ProtoFieldDescriptor,
 } from '../lib/payload'
 
+const props = defineProps<{
+  workspaceReady: boolean
+  savedTopicTemplate: string
+  savedJsonTemplate: string
+}>()
+
 const format = defineModel<PayloadFormat>('format', { required: true })
 const topicTemplate = defineModel<string>('topicTemplate', { required: true })
 const jsonTemplate = defineModel<string>('jsonTemplate', { required: true })
+const messageTemplates = defineModel<MessageTemplate[]>('messageTemplates', { required: true })
 const schemas = defineModel<ProtoSchemaEntry[]>('schemas', { required: true })
 const selectedSchemaId = defineModel<string>('schemaId', { required: true })
 const messageType = defineModel<string>('messageType', { required: true })
 const protoValues = defineModel<Record<string, unknown>>('protoValues', { required: true })
 const fieldRanges = defineModel<Record<string, FieldRange>>('fieldRanges', { required: true })
 
-const emit = defineEmits<{ save: [] }>()
+const emit = defineEmits<{ save: []; saveTemplates: [] }>()
 interface CodeEditorApi {
   findNumericSelection: () => { from: number; to: number; text: string } | null
   replaceRange: (from: number, to: number, expected: string, text: string) => boolean
@@ -39,6 +46,11 @@ const replacementMax = ref('')
 const replacementPrecision = ref<1 | 2>(1)
 const fillMessage = ref('')
 const isFullscreen = ref(false)
+const messageTemplateLibraryOpen = ref(false)
+const messageTemplateName = ref('')
+const messageTemplateError = ref('')
+const renamingTemplateId = ref('')
+const renamingTemplateName = ref('')
 
 const selectedSchema = computed(() => schemas.value.find((schema) => schema.id === selectedSchemaId.value))
 const topicPreview = computed(() => topicTemplate.value.replaceAll('{{deviceId}}', 'sensor-001'))
@@ -72,12 +84,87 @@ watch(messageTypes, (types) => {
   if (types.length && !types.includes(messageType.value)) messageType.value = types[0]!
 }, { immediate: true })
 watch(format, (nextFormat) => {
-  if (nextFormat !== 'json') closeNumericReplacement()
+  if (nextFormat !== 'json') {
+    closeNumericReplacement()
+    messageTemplateLibraryOpen.value = false
+  }
 })
 
 function setSchemaName(value: string) {
   if (!selectedSchema.value) return
   schemas.value = schemas.value.map((schema) => schema.id === selectedSchemaId.value ? { ...schema, name: value } : schema)
+}
+
+function toggleMessageTemplateLibrary() {
+  if (!props.workspaceReady) return
+  closeNumericReplacement()
+  messageTemplateError.value = ''
+  messageTemplateLibraryOpen.value = !messageTemplateLibraryOpen.value
+}
+
+function saveCurrentMessageTemplate() {
+  const name = messageTemplateName.value.trim()
+  if (!name) {
+    messageTemplateError.value = '请输入模板名称。'
+    return
+  }
+
+  messageTemplates.value = [...messageTemplates.value, {
+    id: crypto.randomUUID(),
+    name,
+    topicTemplate: topicTemplate.value,
+    jsonTemplate: jsonTemplate.value,
+  }]
+  messageTemplateName.value = ''
+  messageTemplateError.value = ''
+  emit('saveTemplates')
+}
+
+function applyMessageTemplate(template: MessageTemplate) {
+  const overwritesTopic = topicTemplate.value !== props.savedTopicTemplate && topicTemplate.value !== template.topicTemplate
+  const overwritesJson = jsonTemplate.value !== props.savedJsonTemplate && jsonTemplate.value !== template.jsonTemplate
+  if ((overwritesTopic || overwritesJson) && !window.confirm('当前主题或 JSON 有未保存修改。应用模板会覆盖这些修改，继续吗？')) return
+
+  topicTemplate.value = template.topicTemplate
+  jsonTemplate.value = template.jsonTemplate
+  messageTemplateLibraryOpen.value = false
+}
+
+function startRenameTemplate(template: MessageTemplate) {
+  renamingTemplateId.value = template.id
+  renamingTemplateName.value = template.name
+  messageTemplateError.value = ''
+}
+
+function cancelRenameTemplate() {
+  renamingTemplateId.value = ''
+  renamingTemplateName.value = ''
+}
+
+function saveRenameTemplate(templateId: string) {
+  const name = renamingTemplateName.value.trim()
+  if (!name) {
+    messageTemplateError.value = '模板名称不能为空。'
+    return
+  }
+
+  messageTemplates.value = messageTemplates.value.map((template) => template.id === templateId ? { ...template, name } : template)
+  cancelRenameTemplate()
+  messageTemplateError.value = ''
+  emit('saveTemplates')
+}
+
+function deleteMessageTemplate(template: MessageTemplate) {
+  if (!window.confirm(`确定删除模板“${template.name}”吗？`)) return
+  messageTemplates.value = messageTemplates.value.filter((item) => item.id !== template.id)
+  if (renamingTemplateId.value === template.id) cancelRenameTemplate()
+  messageTemplateError.value = ''
+  emit('saveTemplates')
+}
+
+function summarizeJsonTemplate(value: string) {
+  const summary = value.replace(/\s+/g, ' ').trim()
+  return summary.length > 96 ? `${summary.slice(0, 96)}…` : summary
 }
 
 function addSchema() {
@@ -191,6 +278,7 @@ function isInsideJsonString(source: string, offset: number) {
 }
 
 function openNumericReplacement() {
+  messageTemplateLibraryOpen.value = false
   const target = jsonEditor.value?.findNumericSelection()
   if (!target) {
     replacementError.value = '请将光标放在一个 JSON 数值上，或先选中该数值。'
@@ -295,7 +383,73 @@ onUnmounted(() => {
           <IconSchema aria-hidden="true" class="format-mark proto-mark" :size="17" :stroke-width="1.8" />Protobuf
         </button>
       </div>
-      <div class="toolbar-tools">
+      <div class="toolbar-tools" @keydown.esc.stop.prevent="messageTemplateLibraryOpen = false">
+        <button
+          v-if="format === 'json'"
+          class="tool-button message-template-trigger"
+          type="button"
+          :disabled="!workspaceReady"
+          :aria-expanded="messageTemplateLibraryOpen"
+          aria-haspopup="dialog"
+          aria-controls="message-template-library"
+          title="保存和管理可复用的主题与 JSON 模板"
+          @click="toggleMessageTemplateLibrary"
+        ><IconFileCode aria-hidden="true" :size="15" />模板库 <span class="message-template-count">{{ messageTemplates.length }}</span></button>
+        <div
+          v-if="format === 'json' && messageTemplateLibraryOpen"
+          id="message-template-library"
+          class="message-template-popover"
+          role="dialog"
+          aria-label="消息模板库"
+          @keydown.esc.stop.prevent="messageTemplateLibraryOpen = false"
+        >
+          <header class="message-template-popover-header">
+            <div><strong>消息模板库</strong><span>保存主题与 JSON，变量会原样保留</span></div>
+            <button class="replacement-close" type="button" aria-label="关闭消息模板库" @click="messageTemplateLibraryOpen = false">×</button>
+          </header>
+
+          <form class="message-template-save" @submit.prevent="saveCurrentMessageTemplate">
+            <label for="message-template-name">保存当前编辑内容</label>
+            <div class="message-template-save-row">
+              <input id="message-template-name" v-model="messageTemplateName" placeholder="输入模板名称" autocomplete="off" />
+              <button class="tool-button save-button" type="submit"><IconDeviceFloppy aria-hidden="true" :size="14" />保存</button>
+            </div>
+          </form>
+
+          <p v-if="messageTemplateError" class="message-template-error" role="alert">{{ messageTemplateError }}</p>
+          <div class="message-template-list-heading"><strong>已保存模板</strong><span>{{ messageTemplates.length }} 条</span></div>
+          <div v-if="!messageTemplates.length" class="message-template-empty">还没有模板。输入名称即可保存当前主题和 JSON。</div>
+          <div v-else class="message-template-list">
+            <article v-for="template in messageTemplates" :key="template.id" class="message-template-item">
+              <div class="message-template-copy">
+                <input
+                  v-if="renamingTemplateId === template.id"
+                  v-model="renamingTemplateName"
+                  class="message-template-rename"
+                  aria-label="模板名称"
+                  @keydown.enter.stop.prevent="saveRenameTemplate(template.id)"
+                  @keydown.esc.stop.prevent="cancelRenameTemplate"
+                />
+                <template v-else>
+                  <strong>{{ template.name }}</strong>
+                  <code>{{ template.topicTemplate }}</code>
+                  <small>{{ summarizeJsonTemplate(template.jsonTemplate) }}</small>
+                </template>
+              </div>
+              <div class="message-template-actions">
+                <template v-if="renamingTemplateId === template.id">
+                  <button class="template-action-primary" type="button" @click="saveRenameTemplate(template.id)">保存名称</button>
+                  <button type="button" @click="cancelRenameTemplate">取消</button>
+                </template>
+                <template v-else>
+                  <button class="template-action-primary" type="button" @click="applyMessageTemplate(template)">应用</button>
+                  <button type="button" @click="startRenameTemplate(template)">改名</button>
+                  <button class="template-action-danger" type="button" @click="deleteMessageTemplate(template)">删除</button>
+                </template>
+              </div>
+            </article>
+          </div>
+        </div>
         <span class="editor-language">{{ format === 'json' ? 'JSON template' : 'proto3 schema' }}</span>
         <button v-if="format === 'json'" class="tool-button" type="button" @click="formatJsonTemplate">格式化</button>
         <button
@@ -559,6 +713,34 @@ onUnmounted(() => {
 .template-help code { max-width: 100%; overflow-wrap: anywhere; }
 .template-help .comment-token { padding: 0; color: var(--muted); background: transparent; font-size: 9px; }
 :root:not([data-theme='light']) .template-help > code { color: #67e8f9; background: #083344; }
+.message-template-trigger { flex: 0 0 auto; }
+.message-template-count { min-width: 16px; border-radius: 4px; padding: 2px 4px; color: var(--accent); background: var(--accent-soft); font: 9px var(--font-mono); text-align: center; }
+.message-template-popover { position: absolute; top: calc(100% + 8px); right: 0; z-index: 32; width: min(430px, calc(100vw - 32px)); max-height: min(560px, calc(100dvh - 140px)); display: flex; flex-direction: column; gap: 10px; overflow: hidden; border: 1px solid var(--line-strong); border-radius: 9px; padding: 12px; color: var(--ink); background: var(--surface-raised); box-shadow: 0 16px 40px rgb(0 0 0 / 28%); }
+.message-template-popover-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.message-template-popover-header > div { min-width: 0; display: grid; gap: 3px; }
+.message-template-popover-header strong { color: var(--ink); font-size: 12px; }
+.message-template-popover-header span, .message-template-save p { color: var(--muted); font-size: 10px; line-height: 1.45; }
+.message-template-save { display: grid; gap: 6px; border: 1px solid var(--line); border-radius: 7px; padding: 9px; background: var(--surface); }
+.message-template-save > label { color: var(--ink-soft); font-size: 10px; font-weight: 650; }
+.message-template-save-row { display: flex; gap: 6px; }
+.message-template-save-row input, .message-template-rename { width: 100%; min-width: 0; height: 31px; border: 1px solid var(--line-strong); border-radius: 5px; padding: 0 8px; color: var(--ink); background: var(--surface-input); font-size: 10px; }
+.message-template-save-row .tool-button { flex: 0 0 auto; }
+.message-template-error { margin: -4px 0 0; color: var(--danger); font-size: 10px; }
+.message-template-list-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--ink-soft); font-size: 10px; }
+.message-template-list-heading span { color: var(--subtle); font: 9px var(--font-mono); }
+.message-template-empty { border: 1px dashed var(--line-strong); border-radius: 7px; padding: 16px 12px; color: var(--muted); font-size: 10px; line-height: 1.5; text-align: center; }
+.message-template-list { min-height: 0; display: grid; gap: 6px; overflow: auto; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+.message-template-item { min-width: 0; display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 7px; padding: 8px; background: var(--surface); }
+.message-template-copy { min-width: 0; display: grid; flex: 1; gap: 3px; }
+.message-template-copy strong { overflow: hidden; color: var(--ink); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.message-template-copy code, .message-template-copy small { overflow: hidden; color: var(--muted); font: 9px var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
+.message-template-rename { height: 28px; }
+.message-template-actions { display: flex; flex: 0 0 auto; gap: 4px; }
+.message-template-actions button { min-height: 26px; border: 1px solid var(--line); border-radius: 5px; padding: 0 6px; color: var(--muted); background: var(--surface-raised); font-size: 9px; cursor: pointer; }
+.message-template-actions button:hover { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.message-template-actions .template-action-primary { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 30%, var(--line)); background: var(--accent-soft); font-weight: 650; }
+.message-template-actions .template-action-danger:hover { color: var(--danger); border-color: var(--danger); background: var(--danger-soft); }
+.message-template-actions button:disabled { opacity: .5; cursor: not-allowed; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 @media (max-width: 1120px) {
   .payload-card { min-height: 580px; }
@@ -572,6 +754,9 @@ onUnmounted(() => {
   .editor-toolbar { align-items: flex-start; flex-direction: column; padding-top: 3px; }
   .toolbar-tools { width: 100%; justify-content: flex-start; flex-wrap: wrap; padding-bottom: 6px; }
   .editor-language { margin-right: auto; }
+  .message-template-popover { left: 0; right: auto; }
+  .message-template-item { align-items: stretch; flex-direction: column; }
+  .message-template-actions { justify-content: flex-end; }
   .proto-workspace { min-height: 600px; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(210px, .8fr) minmax(330px, 1.2fr); }
   .field-grid { grid-template-columns: minmax(0, 1fr); }
   .field-form-heading { align-items: flex-start; flex-wrap: wrap; }

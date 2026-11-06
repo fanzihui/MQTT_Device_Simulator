@@ -4,7 +4,7 @@ use tauri::{AppHandle, Manager};
 
 use crate::models::WorkspaceData;
 
-const WORKSPACE_VERSION: u32 = 1;
+const WORKSPACE_VERSION: u32 = 2;
 
 fn workspace_path(app: &AppHandle) -> Result<PathBuf, String> {
     let directory = app
