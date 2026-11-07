@@ -13,12 +13,16 @@ import SettingsPage from './components/SettingsPage.vue'
 import SimulationPlanDialog from './components/SimulationPlanDialog.vue'
 import SubscriptionPanel from './components/SubscriptionPanel.vue'
 import { useSimulator } from './composables/useSimulator'
+import { useAnimatedCount } from './composables/useAnimatedCount'
 import { useThemePreference } from './composables/useThemePreference'
+import { finishActiveMotion, installPressFeedback, pulseStatusIndicator, tweenElement } from './lib/motion'
 import { completeMcpTool } from './lib/tauri'
 import type { McpToolRequest } from './types'
 
 const simulator = reactive(useSimulator())
 useThemePreference()
+const displayedOnlineDeviceCount = useAnimatedCount(computed(() => simulator.onlineDevices.length))
+const appShellElement = ref<HTMLElement | null>(null)
 const publishControlsCollapsed = ref(false)
 const activePage = ref<'workspace' | 'settings'>('workspace')
 const connectionDialogOpen = ref(false)
@@ -34,9 +38,16 @@ const updateStatus = ref<'idle' | 'downloading' | 'installing' | 'error'>('idle'
 const updateProgress = ref(0)
 const updateProgressKnown = ref(false)
 const updateError = ref('')
+const headerStatusElement = ref<HTMLElement | null>(null)
 const selectedPlan = computed(() => simulator.simulationPlans.find((plan) => plan.scenario.id === simulator.selectedScenarioId))
 let unlistenMcpTools: UnlistenFn | undefined
+let removePressFeedback: (() => void) | undefined
 let pendingUpdate: Update | null = null
+
+watch(() => simulator.onlineDevices.length, () => {
+  const indicator = headerStatusElement.value?.querySelector<HTMLElement>('i')
+  if (indicator) pulseStatusIndicator(indicator)
+}, { flush: 'post' })
 
 watch([connectionDialogOpen, planDialogOpen, updateDialogOpen], ([connectionOpen, planOpen, updateOpen]) => {
   document.body.classList.toggle('modal-open', connectionOpen || planOpen || updateOpen)
@@ -55,6 +66,10 @@ watch(updateDialogOpen, async (open) => {
 })
 
 onMounted(async () => {
+  if (appShellElement.value) {
+    tweenElement(appShellElement.value, { opacity: 0, y: 8 }, { opacity: 1, y: 0 }, 240)
+    removePressFeedback = installPressFeedback(appShellElement.value)
+  }
   if (!simulator.isDesktopApp()) return
   void checkForUpdates()
   unlistenMcpTools = await listen<McpToolRequest>('mcp-tool-request', async ({ payload }) => {
@@ -144,8 +159,43 @@ onMounted(async () => {
 
 onUnmounted(() => {
   unlistenMcpTools?.()
+  removePressFeedback?.()
+  finishActiveMotion()
   document.body.classList.remove('modal-open')
 })
+
+function enterPage(element: Element, done: () => void) {
+  tweenElement(element as HTMLElement, { opacity: 0, y: 8 }, { opacity: 1, y: 0 }, 180, done)
+}
+
+function leavePage(element: Element, done: () => void) {
+  tweenElement(element as HTMLElement, { opacity: 1, y: 0 }, { opacity: 0, y: -4 }, 90, done)
+}
+
+function enterDialog(element: Element, done: () => void) {
+  animateDialog(element as HTMLElement, true, done)
+}
+
+function leaveDialog(element: Element, done: () => void) {
+  animateDialog(element as HTMLElement, false, done)
+}
+
+function animateDialog(element: HTMLElement, entering: boolean, done: () => void) {
+  const surface = element.querySelector<HTMLElement>('.dialog-surface')
+  const duration = entering ? 200 : 150
+  if (!surface) {
+    tweenElement(element, { opacity: entering ? 0 : 1 }, { opacity: entering ? 1 : 0 }, duration, done)
+    return
+  }
+  tweenElement(element, { opacity: entering ? 0 : 1 }, { opacity: entering ? 1 : 0 }, duration)
+  tweenElement(
+    surface,
+    { opacity: entering ? 0 : 1, y: entering ? 8 : 0, scale: entering ? 0.985 : 1 },
+    { opacity: entering ? 1 : 0, y: entering ? 0 : 5, scale: entering ? 1 : 0.985 },
+    duration,
+    done,
+  )
+}
 
 function closeConnectionDialog() {
   connectionDialogOpen.value = false
@@ -216,7 +266,7 @@ async function dismissUpdateDialog() {
 </script>
 
 <template>
-  <div class="app-shell">
+  <div ref="appShellElement" class="app-shell">
     <header class="topbar">
       <div class="brand-lockup">
         <div class="brand-mark" aria-hidden="true">
@@ -253,9 +303,9 @@ async function dismissUpdateDialog() {
         <span class="connection-trigger-copy"><strong>连接设置</strong><small>{{ simulator.profile.host }}:{{ simulator.profile.port }}</small></span>
       </button>
 
-      <div class="header-status" :class="{ connected: simulator.onlineDevices.length > 0 }" role="status" aria-live="polite">
+      <div ref="headerStatusElement" class="header-status" :class="{ connected: simulator.onlineDevices.length > 0 }" role="status" aria-live="polite">
         <i />
-        <span>{{ simulator.onlineDevices.length > 0 ? `${simulator.onlineDevices.length} 台在线` : '未连接' }}</span>
+        <span>{{ displayedOnlineDeviceCount > 0 ? `${displayedOnlineDeviceCount} 台在线` : '未连接' }}</span>
       </div>
 
       <div v-if="activePage === 'workspace'" class="topbar-actions">
@@ -267,7 +317,8 @@ async function dismissUpdateDialog() {
       </div>
     </header>
 
-    <main v-if="activePage === 'workspace'" class="workspace-main">
+    <Transition mode="out-in" :css="false" @enter="enterPage" @leave="leavePage">
+    <main v-if="activePage === 'workspace'" key="workspace" class="workspace-main">
       <div class="workbench-grid">
         <aside class="connection-column">
           <ConnectionOverviewPanel
@@ -336,7 +387,8 @@ async function dismissUpdateDialog() {
       </div>
     </main>
 
-    <SettingsPage v-else :desktop-ready="simulator.isDesktopApp()" />
+    <SettingsPage v-else key="settings" :desktop-ready="simulator.isDesktopApp()" />
+    </Transition>
 
     <footer class="statusbar">
       <div class="statusbar-left">
@@ -354,6 +406,7 @@ async function dismissUpdateDialog() {
     </footer>
 
     <Teleport to="body">
+      <Transition :css="false" @enter="enterDialog" @leave="leaveDialog">
       <div v-if="connectionDialogOpen" class="dialog-backdrop" role="presentation" @click.self="closeConnectionDialog" @keydown.esc.prevent.stop="closeConnectionDialog">
         <section ref="connectionDialogElement" class="dialog-surface connection-dialog" role="dialog" aria-modal="true" aria-label="连接设置" tabindex="-1">
           <BrokerPanel
@@ -375,9 +428,12 @@ async function dismissUpdateDialog() {
           />
         </section>
       </div>
+      </Transition>
 
+      <Transition :css="false" @enter="enterDialog" @leave="leaveDialog">
       <SimulationPlanDialog
         v-if="planDialogOpen"
+        key="plan-dialog"
         :initial-mode="planDialogInitialMode"
         :plans="simulator.simulationPlans"
         :selected-scenario-id="simulator.selectedScenarioId"
@@ -387,9 +443,12 @@ async function dismissUpdateDialog() {
         :delete-plan="simulator.deletePlan"
         @close="planDialogOpen = false"
       />
+      </Transition>
 
+      <Transition :css="false" @enter="enterDialog" @leave="leaveDialog">
       <div
         v-if="updateDialogOpen"
+        key="update-dialog"
         class="dialog-backdrop update-backdrop"
         role="presentation"
         @click.self="dismissUpdateDialog"
@@ -459,6 +518,7 @@ async function dismissUpdateDialog() {
           </div>
         </section>
       </div>
+      </Transition>
     </Teleport>
   </div>
 </template>

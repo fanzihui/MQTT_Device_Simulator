@@ -3,6 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { IconActivity, IconArrowDownLeft, IconArrowUpRight, IconListDetails, IconMaximize, IconMinimize, IconTrash, IconX } from '@tabler/icons-vue'
 import type { ActivityClearSelection, MessageEntry, ProtoSchemaEntry, SystemLogEntry } from '../types'
 import { bytesFromHex, decodeProtoMessage, listProtoMessageTypes, parseProtoSchema } from '../lib/payload'
+import { tweenElement } from '../lib/motion'
 
 const tab = defineModel<'published' | 'received' | 'logs'>('tab', { required: true })
 const decodeSchemaId = defineModel<string>('decodeSchemaId', { required: true })
@@ -16,6 +17,9 @@ const props = defineProps<{
 }>()
 
 const selectedMessageId = defineModel<string>('selectedMessageId', { required: true })
+const pendingMessageAnimations = new Set<string>()
+let knownPublishedIds = new Set(props.published.map((entry) => entry.id))
+let knownReceivedIds = new Set(props.received.map((entry) => entry.id))
 const isFullscreen = ref(false)
 const clearDialogOpen = ref(false)
 const clearSelection = ref({ published: false, received: false, logs: false })
@@ -68,6 +72,33 @@ const decoded = computed(() => {
 })
 
 const visibleMessages = computed(() => tab.value === 'received' ? props.received : props.published)
+
+function trackNewMessageIds(ids: string[], knownIds: Set<string>) {
+  for (const id of ids) {
+    if (!knownIds.has(id)) pendingMessageAnimations.add(id)
+  }
+  knownIds.clear()
+  for (const id of ids) knownIds.add(id)
+  while (pendingMessageAnimations.size > 200) {
+    const oldestId = pendingMessageAnimations.values().next().value
+    if (oldestId === undefined) break
+    pendingMessageAnimations.delete(oldestId)
+  }
+}
+
+watch(() => props.published.map((entry) => entry.id), (ids) => trackNewMessageIds(ids, knownPublishedIds))
+watch(() => props.received.map((entry) => entry.id), (ids) => trackNewMessageIds(ids, knownReceivedIds))
+watch(tab, () => pendingMessageAnimations.clear(), { flush: 'sync' })
+
+function enterMessageRow(element: Element, done: () => void) {
+  const row = element as HTMLElement
+  const id = row.dataset.messageId
+  if (!id || !pendingMessageAnimations.delete(id)) {
+    done()
+    return
+  }
+  tweenElement(row, { opacity: 0, y: 6 }, { opacity: 1, y: 0 }, 170, done)
+}
 
 function formatTime(value: string) {
   const date = new Date(value)
@@ -165,14 +196,16 @@ onUnmounted(() => {
         <div class="table-head">
           <span>TOPIC</span><span>DEVICE</span><span>PAYLOAD</span><span>QOS</span><span>STATUS</span><span>TIME</span>
         </div>
-        <button v-for="entry in visibleMessages.slice().reverse()" :key="entry.id" class="message-row" :class="{ selected: selectedMessageId === entry.id }" type="button" @click="selectMessage(entry)">
-          <span class="message-topic mono"><IconArrowUpRight v-if="entry.direction === 'out'" aria-hidden="true" class="out-arrow" :size="15" /><IconArrowDownLeft v-else aria-hidden="true" class="in-arrow" :size="15" />{{ entry.topic }}</span>
-          <span class="message-device mono">{{ entry.deviceId || '订阅客户端' }}</span>
-          <span class="message-payload mono">{{ entry.payloadPreview || entry.payloadHex || '（空载荷）' }}</span>
-          <span class="message-qos">{{ entry.qos }}</span>
-          <span class="message-status"><i />{{ entry.direction === 'out' ? (entry.qos === 0 ? '已发送·未确认' : '已确认') : entry.retain ? '保留消息' : '已接收' }}</span>
-          <span class="message-time mono">{{ formatTime(entry.timestamp) }}</span>
-        </button>
+        <TransitionGroup tag="div" class="message-row-group" :css="false" @enter="enterMessageRow">
+          <button v-for="entry in visibleMessages.slice().reverse()" :key="entry.id" :data-message-id="entry.id" class="message-row" :class="{ selected: selectedMessageId === entry.id }" type="button" @click="selectMessage(entry)">
+            <span class="message-topic mono"><IconArrowUpRight v-if="entry.direction === 'out'" aria-hidden="true" class="out-arrow" :size="15" /><IconArrowDownLeft v-else aria-hidden="true" class="in-arrow" :size="15" />{{ entry.topic }}</span>
+            <span class="message-device mono">{{ entry.deviceId || '订阅客户端' }}</span>
+            <span class="message-payload mono">{{ entry.payloadPreview || entry.payloadHex || '（空载荷）' }}</span>
+            <span class="message-qos">{{ entry.qos }}</span>
+            <span class="message-status"><i />{{ entry.direction === 'out' ? (entry.qos === 0 ? '已发送·未确认' : '已确认') : entry.retain ? '保留消息' : '已接收' }}</span>
+            <span class="message-time mono">{{ formatTime(entry.timestamp) }}</span>
+          </button>
+        </TransitionGroup>
         <div v-if="!visibleMessages.length" class="empty-activity">
           <IconActivity aria-hidden="true" class="empty-activity-icon" :size="60" :stroke-width="1.25" />
           <strong>{{ tab === 'published' ? '还没有发送消息' : '还没有收到消息' }}</strong>
@@ -294,6 +327,7 @@ onUnmounted(() => {
 .activity-card:not(.is-fullscreen) .table-head { height: 32px; }
 .activity-card:not(.is-fullscreen) .message-row { min-height: 38px; }
 .message-list { min-width: 0; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+.message-row-group { display: contents; }
 .table-head, .message-row { display: grid; grid-template-columns: minmax(150px, 1.2fr) minmax(90px, .72fr) minmax(170px, 1.35fr) 52px 124px 92px; align-items: center; gap: 12px; }
 .table-head { position: sticky; top: 0; z-index: 1; min-width: 820px; height: 38px; padding: 0 16px; color: var(--subtle); background: color-mix(in srgb, var(--surface-muted) 50%, transparent); border-bottom: 1px solid var(--line); font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
 .message-row { width: 100%; min-width: 820px; min-height: 42px; padding: 0 16px; border: 0; border-bottom: 1px solid var(--line); color: var(--ink-soft); background: var(--surface); text-align: left; cursor: pointer; transition: background .12s ease; }

@@ -1,6 +1,6 @@
 # MQTT 设备模拟器实施计划
 
-> 更新日期：2026-11-06 · 当前版本基线：v2.2.0 · 产品规格见 [spec.md](spec.md)
+> 更新日期：2026-11-07 · 当前版本基线：v2.4.0 · 产品规格见 [spec.md](spec.md)
 
 ## 产品目标
 
@@ -11,14 +11,15 @@
 ## 当前状态
 
 - 已交付：MQTT 3.1.1/5.0、TCP/TLS、设备批次与重连、JSON/Protobuf、主题订阅、深浅色主题、MCP、签名更新检查与 Windows NSIS 配置。
-- 版本元数据：`package.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml` 和 `src-tauri/Cargo.lock` 已对齐到 2.2.0；`pnpm-lock.yaml` 不保存项目版本。
+- 版本元数据：`package.json`、`package-lock.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml` 和 `src-tauri/Cargo.lock` 已对齐到 2.4.0；`pnpm-lock.yaml` 不保存项目版本。
+- 动效：共享 Tween 调度器已覆盖新消息入场、在线设备数和连接状态反馈；遵从减少动态效果偏好。桌面高频消息场景的视觉与性能验收待执行。
 - 数值替换：替换时由 CodeMirror 在自己的文档中核对目标区间，避免编辑器文档与 Vue 模型偏移不同步；尚未做桌面运行验收。
 - 密码保存：桌面端保存连接配置或仿真方案时，将密码明文写入本机 `workspace.json`；留空并保存会清除密码。此行为已实现，待重启恢复验收。
 - 桌面开发配置仍有待处理项：Vite 使用 1430 端口，Tauri `devUrl` 记录为 1420；在 P0 中先统一为 1430。
 - 更新清单：2026-11-05 配置的 `latest.json` 地址返回 HTTP 200；清单内容、版本比较、签名更新和旧安装包升级仍需通过 Tauri 实际验收。2026-10-26 的 404 是历史记录，不代表当前状态。
 - 未完成：Windows 桌面、真实 Broker、MCP 和签名更新端到端验收。
 
-## P0：v2.2.0 桌面稳定与发布验收
+## P0：v2.4.0 桌面稳定与发布验收
 
 所有 P0 项通过前，不进入新功能发布。每项记录 Windows 版本、应用版本、操作步骤、结果和可复核证据；失败项需修复并重验。
 
@@ -30,6 +31,7 @@
 | 4 | 验收 MCP 边界 | 默认关闭、仅回环监听、Bearer 鉴权有效；缺失/错误令牌和未授权工具调用被拒绝；四类权限生效 |
 | 5 | 验收密码与本地工作区 | 保存配置后重启仍显示已保存密码；留空并保存会清除；删除最后一个关联方案后连接配置及密码一并移除；日志无密码 |
 | 6 | 验收签名更新 | 清单可读且版本有效；NSIS、签名和 `latest.json` 资产齐全；无更新、网络失败、稍后安装、有效/无效签名、旧版升级和安装后重启场景均通过 |
+| 7 | 检查实时动效 | 新消息入场只播放一次；设备状态反馈及时且克制；高频消息无可见卡顿；减少动态效果开启时跳过动效 |
 
 ### P0 发布证据
 
@@ -65,4 +67,4 @@
 - Broker 与方案界面：`src/components/BrokerPanel.vue`、`src/components/SimulationPlanDialog.vue`。
 - 发布和更新：`.github/workflows/release.yml`、`docs/releasing-updates.md`。
 
-本轮未运行构建、自动化测试或 Windows 桌面验收；相关状态仍列为待验证。
+本轮前端构建与类型检查通过；未运行自动化测试或 Windows 桌面验收。真实 Broker 高频消息下的动效观感和性能仍待检查。

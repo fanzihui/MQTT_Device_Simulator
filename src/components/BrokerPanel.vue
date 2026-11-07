@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, nextTick, ref, watch } from 'vue'
 import { IconArrowUpRight, IconDeviceFloppy, IconRefresh, IconServer, IconX } from '@tabler/icons-vue'
 import type { BrokerProfile, DeviceBatch, DeviceStatus, MqttVersion } from '../types'
+import { pulseStatusIndicator } from '../lib/motion'
 
 const profile = defineModel<BrokerProfile>({ required: true })
 const mqttVersion = defineModel<MqttVersion>('mqttVersion', { required: true })
@@ -27,6 +28,23 @@ const emit = defineEmits<{
 
 const onlineCount = computed(() => props.devices.filter((device) => device.status === 'connected').length)
 const retryableCount = computed(() => props.devices.filter((device) => ['error', 'disconnected'].includes(device.status)).length)
+const deviceListElement = ref<HTMLElement | null>(null)
+let previousDeviceStatuses = new Map(props.devices.map((device) => [device.deviceId, device.status]))
+
+watch(() => props.devices.map(({ deviceId, status }) => ({ deviceId, status })), async (statuses) => {
+  const changedDeviceIds = statuses
+    .filter(({ deviceId, status }) => previousDeviceStatuses.get(deviceId) !== status)
+    .map(({ deviceId }) => deviceId)
+  previousDeviceStatuses = new Map(statuses.map(({ deviceId, status }) => [deviceId, status]))
+  if (!changedDeviceIds.length) return
+
+  await nextTick()
+  const rows = [...(deviceListElement.value?.querySelectorAll<HTMLElement>('.device-row') ?? [])]
+  for (const deviceId of changedDeviceIds) {
+    const indicator = rows.find((row) => row.dataset.deviceId === deviceId)?.querySelector<HTMLElement>('.status-dot')
+    if (indicator) pulseStatusIndicator(indicator)
+  }
+}, { flush: 'post' })
 </script>
 
 <template>
@@ -140,8 +158,8 @@ const retryableCount = computed(() => props.devices.filter((device) => ['error',
           <span v-if="devices.length" class="preview-id">{{ devices[0]?.clientId }}{{ devices.length > 1 ? ` + ${devices.length - 1}` : '' }}</span>
         </div>
 
-        <div v-if="devices.length" class="device-list">
-          <div v-for="device in devices.slice(0, 8)" :key="device.deviceId" class="device-row">
+        <div v-if="devices.length" ref="deviceListElement" class="device-list">
+          <div v-for="device in devices.slice(0, 8)" :key="device.deviceId" :data-device-id="device.deviceId" class="device-row">
             <span class="status-dot" :class="device.status === 'connected' ? 'is-green' : ['connecting', 'reconnecting'].includes(device.status) ? 'is-amber' : 'is-red'" />
             <span class="device-name mono">{{ device.deviceId }}</span>
             <span class="device-state">{{ device.status === 'connected' ? '在线' : device.status === 'connecting' ? '连接中' : device.status === 'reconnecting' ? '重连中' : device.status === 'stopped' ? '已停止' : '离线' }}</span>

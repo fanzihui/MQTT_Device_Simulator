@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { IconServer } from '@tabler/icons-vue'
 import type { BrokerProfile, DeviceStatus, MqttVersion } from '../types'
+import { pulseStatusIndicator } from '../lib/motion'
+import { useAnimatedCount } from '../composables/useAnimatedCount'
 
 const props = defineProps<{
   profile: BrokerProfile
@@ -14,6 +16,12 @@ const onlineCount = computed(() => props.devices.filter((device) => device.statu
 const reconnectingCount = computed(() => props.devices.filter((device) => device.status === 'reconnecting').length)
 const connectionPending = computed(() => props.connecting || reconnectingCount.value > 0)
 const connectionLabel = computed(() => props.connecting ? '连接中' : onlineCount.value > 0 ? '已连接' : reconnectingCount.value > 0 ? '重连中' : '未连接')
+const displayedOnlineCount = useAnimatedCount(onlineCount)
+const statusDot = ref<HTMLElement | null>(null)
+
+watch([onlineCount, connectionLabel], () => {
+  if (statusDot.value) pulseStatusIndicator(statusDot.value)
+}, { flush: 'post' })
 </script>
 
 <template>
@@ -25,7 +33,7 @@ const connectionLabel = computed(() => props.connecting ? '连接中' : onlineCo
         <span>{{ profile.name }}</span>
       </div>
       <span class="overview-status" :class="{ connected: onlineCount > 0, connecting: connectionPending }" role="status">
-        <i />{{ connectionLabel }}
+        <i ref="statusDot" />{{ connectionLabel }}
       </span>
     </div>
 
@@ -40,7 +48,7 @@ const connectionLabel = computed(() => props.connecting ? '连接中' : onlineCo
       </div>
       <div>
         <dt>设备在线</dt>
-        <dd>{{ onlineCount }} / {{ devices.length }} 台</dd>
+        <dd>{{ displayedOnlineCount }} / {{ devices.length }} 台</dd>
       </div>
       <div>
         <dt>传输方式</dt>

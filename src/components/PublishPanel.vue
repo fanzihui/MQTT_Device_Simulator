@@ -1,12 +1,17 @@
 <script setup lang="ts">
+import { nextTick, onUnmounted, ref, watch } from 'vue'
 import type { DeviceStatus, MqttVersion, PublishOptions } from '../types'
 import { IconChevronDown, IconChevronLeft, IconChevronRight, IconChevronUp, IconClock, IconInfoCircle, IconLock, IconMouse, IconPlayerPlay, IconPlayerStop, IconPlus, IconSend, IconX } from '@tabler/icons-vue'
+import { tweenNumbers } from '../lib/motion'
 
 const options = defineModel<PublishOptions>('options', { required: true })
 const collapsed = defineModel<boolean>('collapsed', { required: true })
 const mode = defineModel<'manual' | 'periodic'>('mode', { required: true })
 const intervalSeconds = defineModel<number>('intervalSeconds', { required: true })
 const countPerDevice = defineModel<number | null>('countPerDevice', { required: true })
+const publishColumn = ref<HTMLElement | null>(null)
+let collapseStartHeight = 0
+let cancelCollapseTween: () => void = () => undefined
 
 const props = defineProps<{
   mqttVersion: MqttVersion
@@ -52,10 +57,46 @@ function updateCount(value: string) {
   const parsed = Number(value)
   countPerDevice.value = value === '' ? null : Number.isFinite(parsed) ? Math.max(1, Math.floor(parsed)) : null
 }
+
+watch(collapsed, (next, previous) => {
+  const column = publishColumn.value
+  if (!column || next === previous) return
+  collapseStartHeight = column.getBoundingClientRect().height
+  cancelCollapseTween()
+}, { flush: 'sync' })
+
+watch(collapsed, async () => {
+  const column = publishColumn.value
+  if (!column) return
+  await nextTick()
+  const section = column.firstElementChild as HTMLElement | null
+  if (!section) return
+
+  const targetHeight = section.getBoundingClientRect().height
+  column.style.height = `${collapseStartHeight}px`
+  column.style.overflow = 'hidden'
+  section.style.opacity = '0'
+  section.style.transform = 'translate3d(0, 6px, 0)'
+
+  const state = { height: collapseStartHeight, opacity: 0, y: 6 }
+  cancelCollapseTween = tweenNumbers(state, { height: targetHeight, opacity: 1, y: 0 }, 180, (value) => {
+    column.style.height = `${value.height}px`
+    section.style.opacity = String(value.opacity)
+    section.style.transform = `translate3d(0, ${value.y}px, 0)`
+  }, () => {
+    column.style.removeProperty('height')
+    column.style.removeProperty('overflow')
+    section.style.removeProperty('opacity')
+    section.style.removeProperty('transform')
+    cancelCollapseTween = () => undefined
+  })
+}, { flush: 'post' })
+
+onUnmounted(() => cancelCollapseTween())
 </script>
 
 <template>
-  <aside class="publish-column" :class="{ 'is-collapsed': collapsed }">
+  <aside ref="publishColumn" class="publish-column" :class="{ 'is-collapsed': collapsed }">
     <section v-if="collapsed" class="panel-card panel-rail publish-rail">
       <button class="panel-rail-toggle" type="button" aria-label="展开发送控制" title="展开发送控制" :aria-expanded="false" @click="collapsed = false">
         <span class="panel-rail-icon send-icon"><IconSend aria-hidden="true" :size="18" :stroke-width="1.8" /></span>

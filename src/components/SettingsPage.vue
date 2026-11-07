@@ -6,6 +6,7 @@ import packageMetadata from '../../package.json'
 import { loadMcpSettings, rotateMcpToken, updateMcpSettings } from '../lib/tauri'
 import type { McpPermissions, McpSettings, ThemePreference } from '../types'
 import { useThemePreference } from '../composables/useThemePreference'
+import { tweenElement } from '../lib/motion'
 
 const props = defineProps<{ desktopReady: boolean }>()
 const { themePreference } = useThemePreference()
@@ -113,6 +114,14 @@ async function copyText(value: string, label: string) {
 function errorText(error: unknown) {
   return error instanceof Error ? error.message : String(error)
 }
+
+function enterSettingsSection(element: Element, done: () => void) {
+  tweenElement(element as HTMLElement, { opacity: 0, y: 6 }, { opacity: 1, y: 0 }, 160, done)
+}
+
+function leaveSettingsSection(element: Element, done: () => void) {
+  tweenElement(element as HTMLElement, { opacity: 1, y: 0 }, { opacity: 0, y: -3 }, 80, done)
+}
 </script>
 
 <template>
@@ -135,7 +144,8 @@ function errorText(error: unknown) {
         </button>
       </nav>
 
-      <div class="settings-content">
+      <Transition mode="out-in" :css="false" @enter="enterSettingsSection" @leave="leaveSettingsSection">
+      <div :key="activeSection" class="settings-content">
         <header class="settings-intro">
           <span class="settings-kicker">PREFERENCES</span>
           <h1>{{ activeSectionInfo.label }}</h1>
@@ -231,6 +241,7 @@ function errorText(error: unknown) {
           </a>
         </section>
       </div>
+      </Transition>
     </div>
   </main>
 </template>
@@ -253,7 +264,7 @@ function errorText(error: unknown) {
 .settings-section-heading h2 { margin: 0; color: var(--ink); font-size: 14px; }
 .settings-section-heading p { margin: 4px 0 0; color: var(--muted); font-size: 11px; }
 .theme-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
-.theme-option { min-width: 0; min-height: 75px; position: relative; display: flex; align-items: flex-start; gap: 10px; border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: var(--surface-muted); cursor: pointer; }
+.theme-option { min-width: 0; min-height: 75px; position: relative; display: flex; align-items: flex-start; gap: 10px; border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: var(--surface-muted); cursor: pointer; transition: border-color .16s ease, background .16s ease, box-shadow .16s ease; }
 .theme-option.selected { border-color: var(--accent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent); }
 .theme-option input { position: absolute; opacity: 0; pointer-events: none; }
 .theme-option-icon { width: 28px; height: 28px; display: grid; flex: 0 0 28px; place-items: center; border-radius: 6px; color: var(--accent); background: var(--accent-soft); }
@@ -300,7 +311,8 @@ function errorText(error: unknown) {
 .permission-heading h3, .config-heading h3 { margin: 0; color: var(--ink-soft); font-size: 11px; }
 .permission-heading p, .config-heading p { margin: 4px 0 0; color: var(--muted); font-size: 9px; line-height: 1.5; }
 .permission-heading > span { color: var(--subtle); font-size: 9px; }
-.permission-row { min-height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); padding: 8px 3px; cursor: pointer; }
+.permission-row { min-height: 52px; display: flex; align-items: center; justify-content: space-between; gap: 12px; border-top: 1px solid var(--line); padding: 8px 3px; cursor: pointer; transition: background .14s ease; }
+.permission-row:active { background: var(--surface-raised); }
 .permission-copy { min-width: 0; display: grid; gap: 4px; }
 .permission-copy strong { color: var(--ink-soft); font-size: 10px; }
 .permission-copy small { color: var(--muted); font-size: 9px; line-height: 1.4; }
