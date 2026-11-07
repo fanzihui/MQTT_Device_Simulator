@@ -24,10 +24,11 @@ jobs:
             args: '--bundles nsis'
           - platform: 'ubuntu-22.04'
             args: '--bundles appimage,deb'
+          # The app bundle is required for the signed macOS updater archive; DMG is the installer.
           - platform: 'macos-latest'
-            args: '--target aarch64-apple-darwin --bundles dmg'
+            args: '--target aarch64-apple-darwin --bundles app,dmg'
           - platform: 'macos-15-intel'
-            args: '--target x86_64-apple-darwin --bundles dmg'
+            args: '--target x86_64-apple-darwin --bundles app,dmg'
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -186,15 +187,14 @@ jobs:
           require_asset 'Windows NSIS installer' '-setup\.exe$'
           require_asset 'Linux AppImage' '\.AppImage$'
           require_asset 'Linux DEB package' '\.deb$'
-          dmg_count="$(grep -Eic '\.dmg$' <<< "$asset_names" || true)"
-          if (( dmg_count < 2 )); then
-            printf 'Release %s has %s macOS DMG package(s); expected both Apple Silicon and Intel builds. Assets:\n%s\n' "$RELEASE_TAG" "$dmg_count" "$asset_names" >&2
-            exit 1
-          fi
+          require_asset 'Apple Silicon macOS DMG' 'aarch64.*\.dmg$'
+          require_asset 'Intel macOS DMG' '(x86_64|x64).*\.dmg$'
+          require_asset 'Windows NSIS updater signature' '-setup\.exe\.sig$'
+          require_asset 'Linux AppImage updater signature' '\.AppImage\.sig$'
 
-          signature_count="$(grep -Eic '\.sig$' <<< "$asset_names" || true)"
-          if (( signature_count < 4 )); then
-            printf 'Release %s has %s updater signature asset(s); expected signatures for Windows, Linux, and both macOS architectures.\n' "$RELEASE_TAG" "$signature_count" >&2
+          mac_signature_count="$(grep -Eic '\.app\.tar\.gz\.sig$' <<< "$asset_names" || true)"
+          if (( mac_signature_count < 2 )); then
+            printf 'Release %s has %s macOS updater signature asset(s); expected separate Apple Silicon and Intel .app.tar.gz.sig assets. Assets:\n%s\n' "$RELEASE_TAG" "$mac_signature_count" "$asset_names" >&2
             exit 1
           fi
 
@@ -203,4 +203,4 @@ jobs:
             exit 1
           fi
 
-          printf 'Verified Windows, Linux, macOS, latest.json, %s updater signatures, and release notes for %s.\n' "$signature_count" "$RELEASE_TAG"
+          printf 'Verified Windows, Linux, both macOS architectures, updater signatures, latest.json, and release notes for %s.\n' "$RELEASE_TAG"
