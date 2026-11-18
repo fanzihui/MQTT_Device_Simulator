@@ -232,17 +232,24 @@ pub async fn start_monitor(
         &Uuid::new_v4().simple().to_string()[..8]
     );
     let (client, mut event_loop) = make_client(&connection, &client_id)?;
-    for topic in topic_filters {
-        match &client {
-            DeviceClient::V4(client) => client
-                .subscribe(topic.clone(), QoS::AtLeastOnce)
+    match &client {
+        DeviceClient::V4(client) => {
+            client
+                .subscribe_many(topic_filters.iter().cloned().map(|topic| {
+                    rumqttc::mqttbytes::v4::SubscribeFilter::new(topic, QoS::AtLeastOnce)
+                }))
                 .await
-                .map_err(|error| format!("订阅 {topic} 失败：{error}"))?,
-            DeviceClient::V5(client) => client
-                .subscribe(topic.clone(), rumqttc::v5::mqttbytes::QoS::AtLeastOnce)
-                .await
-                .map_err(|error| format!("订阅 {topic} 失败：{error}"))?,
+                .map_err(|error| format!("提交订阅请求失败：{error}"))?
         }
+        DeviceClient::V5(client) => client
+            .subscribe_many(topic_filters.iter().cloned().map(|topic| {
+                rumqttc::v5::mqttbytes::v5::Filter::new(
+                    topic,
+                    rumqttc::v5::mqttbytes::QoS::AtLeastOnce,
+                )
+            }))
+            .await
+            .map_err(|error| format!("提交订阅请求失败：{error}"))?,
     }
 
     let cancel = CancellationToken::new();
@@ -250,6 +257,7 @@ pub async fn start_monitor(
         cancel: cancel.clone(),
     });
     let client_keepalive = client.clone();
+    let subscribed_topics = topic_filters.clone();
     tauri::async_runtime::spawn(async move {
         let _client_keepalive = client_keepalive;
         emit_log(&app, "info", "订阅监视客户端正在连接。".to_string());
@@ -266,6 +274,15 @@ pub async fn start_monitor(
                                 | DeviceEvent::V5(V5Event::Incoming(V5Packet::ConnAck(_)))
                         ) {
                             emit_log(&app, "success", "订阅监视客户端已连接。".to_string());
+                        }
+                        match &event {
+                            DeviceEvent::V4(V4Event::Incoming(V4Packet::SubAck(ack))) => {
+                                log_v4_subscription_ack(&app, &subscribed_topics, &ack.return_codes);
+                            }
+                            DeviceEvent::V5(V5Event::Incoming(V5Packet::SubAck(ack))) => {
+                                log_v5_subscription_ack(&app, &subscribed_topics, &ack.return_codes);
+                            }
+                            _ => {}
                         }
                         if let Some(message) = monitor_message(event) {
                             let _ = app.emit("inbound-message", message);
@@ -285,6 +302,58 @@ pub async fn start_monitor(
         emit_log(&app, "info", "订阅监视客户端已停止。".to_string());
     });
     Ok(())
+}
+
+fn log_v4_subscription_ack(
+    app: &AppHandle,
+    topics: &[String],
+    return_codes: &[rumqttc::mqttbytes::v4::SubscribeReasonCode],
+) {
+    for (index, topic) in topics.iter().enumerate() {
+        match return_codes.get(index) {
+            Some(rumqttc::mqttbytes::v4::SubscribeReasonCode::Success(qos)) => emit_log(
+                app,
+                "success",
+                format!("Broker 已接受订阅 {topic}，授权 QoS {qos:?}。"),
+            ),
+            Some(rumqttc::mqttbytes::v4::SubscribeReasonCode::Failure) => emit_log(
+                app,
+                "error",
+                format!("Broker 拒绝订阅 {topic}；请检查主题过滤器和 EMQX 访问控制。"),
+            ),
+            None => emit_log(
+                app,
+                "warning",
+                format!("Broker 未返回订阅 {topic} 的授权结果。"),
+            ),
+        }
+    }
+}
+
+fn log_v5_subscription_ack(
+    app: &AppHandle,
+    topics: &[String],
+    return_codes: &[rumqttc::v5::mqttbytes::v5::SubscribeReasonCode],
+) {
+    for (index, topic) in topics.iter().enumerate() {
+        match return_codes.get(index) {
+            Some(rumqttc::v5::mqttbytes::v5::SubscribeReasonCode::Success(qos)) => emit_log(
+                app,
+                "success",
+                format!("Broker 已接受订阅 {topic}，授权 QoS {qos:?}。"),
+            ),
+            Some(reason) => emit_log(
+                app,
+                "error",
+                format!("Broker 拒绝订阅 {topic}，原因：{reason:?}。"),
+            ),
+            None => emit_log(
+                app,
+                "warning",
+                format!("Broker 未返回订阅 {topic} 的授权结果。"),
+            ),
+        }
+    }
 }
 
 #[tauri::command]

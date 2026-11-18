@@ -565,7 +565,7 @@ export function useSimulator() {
     try {
       await invokeStartMonitor(connectionSnapshot(), topics)
       monitorRunning.value = true
-      addLog('info', `监视客户端已订阅 ${topics.length} 个主题。`)
+      addLog('info', `已提交 ${topics.length} 个主题的订阅请求，等待 Broker 确认；授权结果会记录在系统日志中。`)
     } catch (error) {
       addLog('error', `启动订阅失败：${errorMessage(error)}`)
     }
