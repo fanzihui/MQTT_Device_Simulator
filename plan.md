@@ -1,6 +1,6 @@
 # MQTT 设备模拟器实施计划
 
-> 更新日期：2026-11-07 · 当前版本基线：v2.4.0 · 产品规格见 [spec.md](spec.md)
+> 更新日期：2026-11-25 · 当前版本基线：v2.5.0 · 产品规格见 [spec.md](spec.md)
 
 ## 产品目标
 
@@ -11,7 +11,7 @@
 ## 当前状态
 
 - 已交付：MQTT 3.1.1/5.0、TCP/TLS、设备批次与重连、JSON/Protobuf、主题订阅、深浅色主题、MCP、签名更新检查与 Windows NSIS 配置。
-- 版本元数据：`package.json`、`package-lock.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml` 和 `src-tauri/Cargo.lock` 已对齐到 2.4.0；`pnpm-lock.yaml` 不保存项目版本。
+- 版本元数据：`package.json`、`package-lock.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml` 和 `src-tauri/Cargo.lock` 已对齐到 2.5.0；`pnpm-lock.yaml` 不保存项目版本。
 - 动效：共享 Tween 调度器已覆盖新消息入场、在线设备数和连接状态反馈；遵从减少动态效果偏好。桌面高频消息场景的视觉与性能验收待执行。
 - 订阅诊断：多主题订阅会记录每个 SUBACK 授权结果，便于识别 EMQX ACL 或过滤器拒绝；实际 EMQX 回执链路仍需桌面联调确认。
 - 数值替换：替换时由 CodeMirror 在自己的文档中核对目标区间，避免编辑器文档与 Vue 模型偏移不同步；尚未做桌面运行验收。
@@ -20,7 +20,7 @@
 - 更新清单：2026-11-05 配置的 `latest.json` 地址返回 HTTP 200；清单内容、版本比较、签名更新和旧安装包升级仍需通过 Tauri 实际验收。2026-10-26 的 404 是历史记录，不代表当前状态。
 - 未完成：Windows 桌面、真实 Broker、MCP 和签名更新端到端验收。
 
-## P0：v2.4.0 桌面稳定与发布验收
+## P0：v2.5.0 桌面稳定与发布验收
 
 所有 P0 项通过前，不进入新功能发布。每项记录 Windows 版本、应用版本、操作步骤、结果和可复核证据；失败项需修复并重验。
 
